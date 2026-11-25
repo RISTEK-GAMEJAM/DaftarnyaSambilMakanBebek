@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/elves_test.gd" id="1_test"]
+[ext_resource type="PackedScene" path="res://scenes/characters/snatcher.tscn" id="2_snatcher"]
+[ext_resource type="PackedScene" path="res://scenes/characters/elf_boy.tscn" id="3_boy"]
+[ext_resource type="PackedScene" path="res://scenes/characters/elf_girl.tscn" id="4_girl"]
+
+[node name="ElvesTest" type="Node2D"]
+script = ExtResource("1_test")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(4, 4)
+
+[node name="Snatcher" parent="." instance=ExtResource("2_snatcher")]
+position = Vector2(0, -10)
+
+[node name="ElfBoy" parent="." instance=ExtResource("3_boy")]
+position = Vector2(-46, 26)
+behavior_mode = 1
+patrol_distance = 28.0
+
+[node name="ElfGirl" parent="." instance=ExtResource("4_girl")]
+position = Vector2(46, 26)
+behavior_mode = 1
+patrol_distance = 28.0
+default_facing_left = false
