@@ -1,7 +1,7 @@
 class_name TwinLabyrinth
 extends RefCounted
 
-enum Phase { ROLL, MOVE, DUEL, WON }
+enum Phase { ROLL, MOVE, DUEL, WON, LOST }
 
 const Board = preload("res://scripts/labyrinth.gd")
 const START := "S"
@@ -9,36 +9,61 @@ const SPAWN := "H"
 const SAFE := "o"
 const EXIT := "E"
 const SUITS := ["♣", "♦", "♥", "♠"]
-const RANKS := ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+const RANKS_24 := ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+const TARGET_24 := 24
 
+var _layouts: Array = []
 var _phase := Phase.ROLL
 var _dice := Vector2i.ZERO
 var _runners: Array[Vector2i] = []
 var _snatchers: Array[Vector2i] = []
 var _stun := [0, 0]
 var _escaped := [false, false]
+var _captured := [false, false]
+var _lost: bool = false
+var _lost_lane: int = -1
 var _pending_duels: Array[int] = []
-var _deck: Array[int] = []
-var _player_hand: Array[int] = []
-var _snatcher_hand: Array[int] = []
+var _duel_cards: Array[Dictionary] = []
+var _duel_solution_hint: String = ""
 var _duel_results: Array[Dictionary] = []
+var _last_snatcher_paths: Array = [[], []]
+var _last_duel_move: Dictionary = {}
 
 
-func _init() -> void:
+func _init(custom_layouts: Array = []) -> void:
+	_layouts = custom_layouts if custom_layouts.size() == 2 else Board.LAYOUTS
 	for lane in range(2):
-		_runners.append(Board.find_tile(lane, START))
-		_snatchers.append(Board.find_tile(lane, SPAWN))
+		_runners.append(Board.find_tile(lane, START, _layouts))
+		_snatchers.append(Board.find_tile(lane, SPAWN, _layouts))
+
+
+func get_layouts() -> Array:
+	return _layouts
+
+
+func get_echo_steps() -> Vector2i:
+	if _dice == Vector2i.ZERO:
+		return Vector2i.ZERO
+	var echo_a := absi(_dice.x - _dice.y)
+	var echo_b := mini(_dice.x, _dice.y) if echo_a != 0 else _dice.x + _dice.y
+	return Vector2i(echo_a, echo_b)
 
 
 func get_state() -> Dictionary:
 	return {
 		"phase": _phase,
 		"dice": _dice,
+		"echo_steps": get_echo_steps(),
 		"runners": _runners.duplicate(),
 		"snatchers": _snatchers.duplicate(),
 		"stun": _stun.duplicate(),
 		"escaped": _escaped.duplicate(),
+		"captured": _captured.duplicate(),
+		"lost_lane": _lost_lane,
+		"pending_duels": _pending_duels.duplicate(),
 		"duel_results": _duel_results.duplicate(true),
+		"last_snatcher_paths": _last_snatcher_paths.duplicate(true),
+		"last_duel_move": _last_duel_move.duplicate(true),
 	}
 
 
@@ -47,6 +72,8 @@ func roll_dice() -> bool:
 		return false
 	_dice = Vector2i(randi_range(1, 6), randi_range(1, 6))
 	_duel_results.clear()
+	_last_snatcher_paths = [[], []]
+	_last_duel_move = {}
 	_phase = Phase.MOVE
 	return true
 
@@ -60,13 +87,15 @@ func move_runners(die_for_a: int, route_a: Array[Vector2i], route_b: Array[Vecto
 	if not _valid_route(1, route_b, _dice[1 - die_for_a]):
 		return false
 
+	_last_snatcher_paths = [[], []]
+	_last_duel_move = {}
+
 	_move_runner(0, route_a)
 	_move_runner(1, route_b)
 
-	var echo_a := absi(_dice.x - _dice.y)
-	var echo_b := mini(_dice.x, _dice.y) if echo_a != 0 else _dice.x + _dice.y
-	_move_snatcher(0, echo_a)
-	_move_snatcher(1, echo_b)
+	var echo := get_echo_steps()
+	_move_snatcher(0, echo.x)
+	_move_snatcher(1, echo.y)
 	_advance()
 	return true
 
@@ -76,30 +105,21 @@ func get_duel() -> Dictionary:
 		return {}
 	return {
 		"lane": _pending_duels[0],
-		"player_cards": _card_names(_player_hand),
-		"player_score": _score(_player_hand),
-		"snatcher_card": _card_names(_snatcher_hand)[0],
+		"cards": _duel_cards.duplicate(true),
+		"solution_hint": _duel_solution_hint,
 	}
 
 
-func hit() -> bool:
+func resolve_duel_24(won: bool, fast_bonus: bool = false, player_expr: String = "") -> bool:
 	if _phase != Phase.DUEL:
 		return false
-	_player_hand.append(_deck.pop_back())
-	if _score(_player_hand) >= 21:
-		_resolve_duel()
-	return true
-
-
-func stand() -> bool:
-	if _phase != Phase.DUEL:
-		return false
-	_resolve_duel()
+	_finish_duel_24(won, fast_bonus, player_expr)
+	_advance()
 	return true
 
 
 func _valid_route(lane: int, route: Array[Vector2i], steps: int) -> bool:
-	if _escaped[lane]:
+	if _escaped[lane] or _captured[lane]:
 		return route.is_empty()
 	if route.is_empty() or route.size() > steps:
 		return false
@@ -107,7 +127,7 @@ func _valid_route(lane: int, route: Array[Vector2i], steps: int) -> bool:
 	var previous := _runners[lane]
 	for index in range(route.size()):
 		var cell := route[index]
-		var marker := Board.tile(lane, cell)
+		var marker := Board.tile(lane, cell, _layouts)
 		if previous.distance_squared_to(cell) != 1 or marker == "#":
 			return false
 		if marker == EXIT:
@@ -117,119 +137,264 @@ func _valid_route(lane: int, route: Array[Vector2i], steps: int) -> bool:
 
 
 func _move_runner(lane: int, route: Array[Vector2i]) -> void:
-	if route.is_empty():
+	if route.is_empty() or _captured[lane]:
 		return
 	_set_runner(lane, route.back())
 
 
 func _set_runner(lane: int, cell: Vector2i) -> void:
 	_runners[lane] = cell
-	_escaped[lane] = Board.tile(lane, cell) == EXIT
+	_escaped[lane] = Board.tile(lane, cell, _layouts) == EXIT
 
 
 func _move_snatcher(lane: int, steps: int) -> void:
+	var walked: Array[Vector2i] = []
 	if _escaped[lane]:
+		_last_snatcher_paths[lane] = walked
 		return
+	# Already captured in Snatcher's tail: stay together and duel again until Elf wins Game 24!
+	if _captured[lane]:
+		_last_snatcher_paths[lane] = walked
+		_pending_duels.append(lane)
+		return
+
 	var target := _runners[lane]
-	var safe := Board.tile(lane, target) == SAFE
+	var safe := Board.tile(lane, target, _layouts) == SAFE
 	if _stun[lane] > 0:
 		_stun[lane] -= 1
 	elif steps > 0 and _snatchers[lane] != target:
-		var path := Board.shortest_path(lane, _snatchers[lane], target)
+		var path := Board.shortest_path(lane, _snatchers[lane], target, _layouts)
 		if not path.is_empty():
-			_snatchers[lane] = path[mini(steps, path.size()) - 1]
+			var count := mini(steps, path.size())
+			for i in range(count):
+				walked.append(path[i])
+			_snatchers[lane] = path[count - 1]
+	_last_snatcher_paths[lane] = walked
 	if not safe and _snatchers[lane] == target:
+		_captured[lane] = true
 		_pending_duels.append(lane)
 
 
 func _advance() -> void:
-	while not _pending_duels.is_empty():
+	if _lost:
+		_pending_duels.clear()
+		_phase = Phase.LOST
+		return
+	if not _pending_duels.is_empty():
 		_phase = Phase.DUEL
-		_deck.clear()
-		for card in range(52):
-			_deck.append(card)
-		_deck.shuffle()
-		_player_hand = [_deck.pop_back(), _deck.pop_back()]
-		_snatcher_hand = [_deck.pop_back(), _deck.pop_back()]
-		if _score(_player_hand) < 21:
-			return
-		_finish_duel()
+		_deal_solvable_24()
+		return
 	_phase = Phase.WON if _escaped[0] and _escaped[1] else Phase.ROLL
 
 
-func _resolve_duel() -> void:
-	_finish_duel()
-	_advance()
+func _deal_solvable_24() -> void:
+	# Draw 4 cards (A=1..10 across 4 suits) guaranteed to have a valid Game 24 solution.
+	for _attempt in range(80):
+		var deck: Array[int] = []
+		for i in range(40):
+			deck.append(i)
+		deck.shuffle()
+
+		var cards: Array[Dictionary] = []
+		var vals: Array[int] = []
+		for k in range(4):
+			var id := deck[k]
+			var rank_idx := id % RANKS_24.size()
+			var suit_idx := floori(float(id) / float(RANKS_24.size()))
+			var val := rank_idx + 1
+			vals.append(val)
+			cards.append({
+				"label": RANKS_24[rank_idx] + SUITS[suit_idx],
+				"value": val,
+			})
+
+		var sol := find_solution_24(vals)
+		if sol != "":
+			_duel_cards = cards
+			_duel_solution_hint = sol
+			return
+
+	# Fallback guaranteed solvable hand (6, 4, 2, 1)
+	_duel_cards = [
+		{"label": "6♠", "value": 6},
+		{"label": "4♥", "value": 4},
+		{"label": "2♦", "value": 2},
+		{"label": "A♣", "value": 1},
+	]
+	_duel_solution_hint = "(6 × 4) × (2 - 1)"
 
 
-func _finish_duel() -> void:
+func _finish_duel_24(won: bool, fast_bonus: bool, player_expr: String) -> void:
 	var lane: int = _pending_duels.pop_front()
-	var player_score := _score(_player_hand)
-	if player_score < 21:
-		while _score(_snatcher_hand) < 17:
-			_snatcher_hand.append(_deck.pop_back())
-	var snatcher_score := _score(_snatcher_hand)
 	var outcome := "loss"
+	var runner_path: Array[Vector2i] = []
+	var snatcher_path: Array[Vector2i] = []
+	var triggered_game_over := false
 
-	if player_score == 21:
-		outcome = "blackjack"
+	if won and fast_bonus:
+		outcome = "fast_win"
+		_captured[lane] = false
 		_stun[lane] = 2
-		_move_toward_exit(lane, 5)
-	elif player_score < 21 and (snatcher_score > 21 or player_score > snatcher_score):
+		runner_path = _move_toward_exit(lane, 4)
+	elif won:
 		outcome = "win"
+		_captured[lane] = false
 		_stun[lane] = 1
-		_move_toward_exit(lane, maxi(0, player_score - snatcher_score))
+		runner_path = _move_toward_exit(lane, 2)
 	else:
-		_retreat(lane)
+		# Loss: Elf stays wrapped in Snatcher's tail and is dragged toward SpawnSnatcher!
+		_captured[lane] = true
+		var drag_result := _drag_toward_lair(lane)
+		runner_path = drag_result["path"]
+		snatcher_path = drag_result["path"].duplicate()
+		triggered_game_over = drag_result["reached_lair"]
+		if triggered_game_over:
+			_lost = true
+			_lost_lane = lane
+
+	_last_duel_move = {
+		"lane": lane,
+		"outcome": outcome,
+		"runner_path": runner_path,
+		"snatcher_path": snatcher_path,
+		"game_over": triggered_game_over,
+	}
 
 	_duel_results.append({
 		"lane": lane,
 		"outcome": outcome,
-		"player_score": player_score,
-		"snatcher_score": snatcher_score,
-		"player_cards": _card_names(_player_hand),
-		"snatcher_cards": _card_names(_snatcher_hand),
+		"cards": _duel_cards.duplicate(true),
+		"player_expr": player_expr,
+		"solution_hint": _duel_solution_hint,
+		"runner_path": runner_path.duplicate(),
+		"snatcher_path": snatcher_path.duplicate(),
+		"game_over": triggered_game_over,
 	})
 
 
-func _move_toward_exit(lane: int, steps: int) -> void:
-	var exit_cell := Board.find_tile(lane, EXIT)
-	var path := Board.shortest_path(lane, _runners[lane], exit_cell)
+func _move_toward_exit(lane: int, steps: int) -> Array[Vector2i]:
+	var walked: Array[Vector2i] = []
+	var exit_cell := Board.find_tile(lane, EXIT, _layouts)
+	var path := Board.shortest_path(lane, _runners[lane], exit_cell, _layouts)
 	if steps > 0 and not path.is_empty():
-		_set_runner(lane, path[mini(steps, path.size()) - 1])
+		var count := mini(steps, path.size())
+		for i in range(count):
+			walked.append(path[i])
+		_set_runner(lane, path[count - 1])
+	return walked
 
 
-func _retreat(lane: int) -> void:
-	var spawn := Board.find_tile(lane, SPAWN)
-	var path := Board.shortest_path(lane, _runners[lane], spawn)
+func _drag_toward_lair(lane: int) -> Dictionary:
+	var walked: Array[Vector2i] = []
+	var spawn := Board.find_tile(lane, SPAWN, _layouts)
+	if _runners[lane] == spawn:
+		_snatchers[lane] = spawn
+		return {"path": walked, "reached_lair": true}
+
+	var path := Board.shortest_path(lane, _runners[lane], spawn, _layouts)
 	var steps := mini(maxi(_dice.x, _dice.y), path.size())
-	if steps == 0:
-		return
-	_set_runner(lane, path[steps - 1])
-	# Place the Snatcher up to two steps behind the runner, bounded by spawn.
-	_snatchers[lane] = path[mini(steps + 2, path.size()) - 1]
+	if steps > 0:
+		for i in range(steps):
+			walked.append(path[i])
+		var dest := path[steps - 1]
+		_set_runner(lane, dest)
+		_snatchers[lane] = dest
+	return {
+		"path": walked,
+		"reached_lair": _runners[lane] == spawn,
+	}
 
 
-func _score(hand: Array[int]) -> int:
-	var total := 0
-	var soft_aces := 0
-	for card in hand:
-		var rank := card % RANKS.size()
-		if rank == 0:
-			total += 11
-			soft_aces += 1
-		else:
-			total += mini(rank + 1, 10)
-	while total > 21 and soft_aces > 0:
-		total -= 10
-		soft_aces -= 1
-	return total
+# --- Exact rational arithmetic helpers for Game 24 ---
+
+static func _gcd(a: int, b: int) -> int:
+	var x := absi(a)
+	var y := absi(b)
+	while y != 0:
+		var tmp := x % y
+		x = y
+		y = tmp
+	return maxi(x, 1)
 
 
-func _card_names(hand: Array[int]) -> Array[String]:
-	var names: Array[String] = []
-	for card in hand:
-		var rank := card % RANKS.size()
-		var suit := floori(float(card) / RANKS.size())
-		names.append(RANKS[rank] + SUITS[suit])
-	return names
+static func rat_make(num: int, den: int = 1) -> Vector2i:
+	if den < 0:
+		num = -num
+		den = -den
+	if num == 0:
+		return Vector2i(0, 1)
+	var g := _gcd(num, den)
+	return Vector2i(num / g, den / g)
+
+
+static func rat_apply(a: Vector2i, b: Vector2i, op: String) -> Vector2i:
+	match op:
+		"+":
+			return rat_make(a.x * b.y + b.x * a.y, a.y * b.y)
+		"-":
+			return rat_make(a.x * b.y - b.x * a.y, a.y * b.y)
+		"*", "×":
+			return rat_make(a.x * b.x, a.y * b.y)
+		"/", "÷", ":":
+			if b.x == 0:
+				return Vector2i(0, 0) # invalid division by zero
+			return rat_make(a.x * b.y, a.y * b.x)
+	return Vector2i(0, 0)
+
+
+static func rat_format(r: Vector2i) -> String:
+	if r.y == 1:
+		return str(r.x)
+	return "%d/%d" % [r.x, r.y]
+
+
+static func rat_is_24(r: Vector2i) -> bool:
+	return r.y == 1 and r.x == TARGET_24
+
+
+static func find_solution_24(values: Array[int]) -> String:
+	var items: Array[Dictionary] = []
+	for v in values:
+		items.append({"rat": rat_make(v, 1), "expr": str(v)})
+	return _solve_24_recursive(items)
+
+
+static func _solve_24_recursive(items: Array[Dictionary]) -> String:
+	if items.size() == 1:
+		var r: Vector2i = items[0]["rat"]
+		return String(items[0]["expr"]) if rat_is_24(r) else ""
+
+	var n := items.size()
+	for i in range(n):
+		for j in range(i + 1, n):
+			var rest: Array[Dictionary] = []
+			for k in range(n):
+				if k != i and k != j:
+					rest.append(items[k])
+
+			var a: Vector2i = items[i]["rat"]
+			var b: Vector2i = items[j]["rat"]
+			var ea: String = items[i]["expr"]
+			var eb: String = items[j]["expr"]
+
+			var candidates: Array[Dictionary] = [
+				{"rat": rat_apply(a, b, "+"), "expr": "(%s + %s)" % [ea, eb]},
+				{"rat": rat_apply(a, b, "*"), "expr": "(%s × %s)" % [ea, eb]},
+				{"rat": rat_apply(a, b, "-"), "expr": "(%s - %s)" % [ea, eb]},
+				{"rat": rat_apply(b, a, "-"), "expr": "(%s - %s)" % [eb, ea]},
+			]
+			if b.x != 0:
+				candidates.append({"rat": rat_apply(a, b, ":"), "expr": "(%s : %s)" % [ea, eb]})
+			if a.x != 0:
+				candidates.append({"rat": rat_apply(b, a, ":"), "expr": "(%s : %s)" % [eb, ea]})
+
+			for cand in candidates:
+				var cr: Vector2i = cand["rat"]
+				if cr.y == 0:
+					continue
+				var next_items := rest.duplicate()
+				next_items.append(cand)
+				var found := _solve_24_recursive(next_items)
+				if found != "":
+					return found
+	return ""

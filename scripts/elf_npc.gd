@@ -1,6 +1,6 @@
 extends CharacterBody2D
 
-enum BehaviorMode { IDLE, PATROL, PLAYER_TEST, CAPTURED }
+enum BehaviorMode { IDLE, PATROL, PLAYER_TEST, CAPTURED, BOARD }
 
 @export var behavior_mode: BehaviorMode = BehaviorMode.IDLE
 @export var move_speed: float = 60.0
@@ -16,6 +16,7 @@ var facing_left: bool = true
 var _origin_x: float = 0.0
 var _patrol_dir: float = -1.0
 var _wait_timer: float = 0.0
+var _pre_capture_mode: BehaviorMode = BehaviorMode.IDLE
 
 
 func _ready() -> void:
@@ -42,19 +43,39 @@ func _apply_facing() -> void:
 	visuals.scale.x = 1.0 if facing_left else -1.0
 
 
+func set_facing_left(is_left: bool) -> void:
+	facing_left = is_left
+	if is_node_ready():
+		_apply_facing()
+
+
+func set_board_motion(moving: bool, dir_x: float = 0.0) -> void:
+	if behavior_mode == BehaviorMode.CAPTURED:
+		return
+	if dir_x < -0.05:
+		facing_left = true
+		_apply_facing()
+	elif dir_x > 0.05:
+		facing_left = false
+		_apply_facing()
+	play_state("walk" if moving else "idle")
+
+
 func is_captured() -> bool:
 	return behavior_mode == BehaviorMode.CAPTURED
 
 
 func set_captured(captured: bool) -> void:
 	if captured:
+		if behavior_mode != BehaviorMode.CAPTURED:
+			_pre_capture_mode = behavior_mode
 		behavior_mode = BehaviorMode.CAPTURED
 		velocity = Vector2.ZERO
 		if collision_shape:
 			collision_shape.set_deferred("disabled", true)
 		play_state("captured")
 	else:
-		behavior_mode = BehaviorMode.IDLE
+		behavior_mode = _pre_capture_mode if _pre_capture_mode == BehaviorMode.BOARD else BehaviorMode.IDLE
 		rotation = 0.0
 		_origin_x = global_position.x
 		if collision_shape:
@@ -73,6 +94,9 @@ func _physics_process(delta: float) -> void:
 		BehaviorMode.IDLE:
 			velocity = Vector2.ZERO
 			play_state("idle")
+
+		BehaviorMode.BOARD:
+			velocity = Vector2.ZERO
 
 		BehaviorMode.CAPTURED:
 			velocity = Vector2.ZERO

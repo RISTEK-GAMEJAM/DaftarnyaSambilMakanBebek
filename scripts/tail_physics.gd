@@ -39,6 +39,7 @@ var owner_velocity: Vector2 = Vector2.ZERO
 
 var mode: TailMode = TailMode.FREE
 var _strike_target: Node2D = null
+var _carried_target: Node2D = null
 var _strike_timer: float = 0.0
 var _strike_callback: Callable = Callable()
 var _carry_waist_offset: Vector2 = Vector2(0.0, -10.0)
@@ -53,10 +54,54 @@ func _ready() -> void:
 		anchor = get_node_or_null(anchor_path)
 	if wrap_front:
 		wrap_front.visible = false
+	_sync_transform_from_owner()
+	_init_chain()
+
+
+func _get_owner_scale() -> float:
+	var parent_node := get_parent() as Node2D
+	if parent_node:
+		var gs := parent_node.global_scale.abs()
+		return maxf((gs.x + gs.y) * 0.5, 0.05)
+	return 1.0
+
+
+func _get_target_scale(target: Node2D) -> float:
+	if is_instance_valid(target):
+		var gs := target.global_scale.abs()
+		return maxf((gs.x + gs.y) * 0.5, 0.05)
+	return _get_owner_scale()
+
+
+func _sync_transform_from_owner() -> void:
+	var s := _get_owner_scale()
+	scale = Vector2(s, s)
+	var parent_node := get_parent() as Node2D
+	if parent_node:
+		var abs_z := _get_absolute_z_index(parent_node)
+		z_as_relative = false
+		z_index = abs_z - 1
+
+
+func _get_absolute_z_index(node: Node) -> int:
+	var total := 0
+	var current: Node = node
+	while current is CanvasItem:
+		var ci := current as CanvasItem
+		total += ci.z_index
+		if not ci.z_as_relative:
+			break
+		current = current.get_parent()
+	return total
+
+
+func reset_chain() -> void:
+	_sync_transform_from_owner()
 	_init_chain()
 
 
 func _init_chain() -> void:
+	var s := _get_owner_scale()
 	var start_pos := anchor.global_position if anchor else global_position
 	var back_x := -1.0 if facing_right else 1.0
 	points.resize(segment_count + 1)
@@ -64,8 +109,8 @@ func _init_chain() -> void:
 	for i in range(segment_count + 1):
 		var t := float(i) / float(segment_count)
 		var offset := Vector2(
-			back_x * float(i) * segment_length * 0.92,
-			sin(t * PI * 1.4) * 5.0 + t * 2.0
+			back_x * float(i) * segment_length * s * 0.92,
+			(sin(t * PI * 1.4) * 5.0 + t * 2.0) * s
 		)
 		points[i] = start_pos + offset
 		prev_points[i] = points[i]
@@ -80,6 +125,7 @@ func set_motion_state(is_facing_right: bool, vel: Vector2) -> void:
 
 func start_strike(target: Node2D, waist_offset: Vector2, on_hit: Callable) -> void:
 	_strike_target = target
+	_carried_target = target
 	_carry_waist_offset = waist_offset
 	_strike_callback = on_hit
 	_strike_timer = 0.0
@@ -97,6 +143,7 @@ func start_carry(waist_offset: Vector2) -> void:
 func release_carry() -> void:
 	mode = TailMode.FREE
 	_strike_target = null
+	_carried_target = null
 	_strike_callback = Callable()
 	if wrap_front:
 		wrap_front.visible = false
@@ -123,54 +170,56 @@ func get_carry_sway_angle() -> float:
 func _physics_process(delta: float) -> void:
 	if not anchor:
 		return
+	_sync_transform_from_owner()
 	if not _initialized:
 		_init_chain()
 
 	var dt := minf(delta, 0.033)
 	_time += dt
 
+	var s := _get_owner_scale()
 	var root_pos := anchor.global_position
 	var back_x := -1.0 if facing_right else 1.0
-	var speed := owner_velocity.length()
+	var speed := owner_velocity.length() / s
 	var flight_ratio := clampf(speed / 120.0, 0.0, 1.0)
 
 	points[0] = root_pos
 	prev_points[0] = root_pos
 
 	if mode == TailMode.STRIKING:
-		_update_strike(dt, root_pos)
+		_update_strike(dt, root_pos, s)
 	elif mode == TailMode.CARRYING:
-		_update_carrying(dt, root_pos, back_x, flight_ratio)
+		_update_carrying(dt, root_pos, back_x, flight_ratio, s)
 	else:
-		_update_free(dt, root_pos, back_x, flight_ratio)
+		_update_free(dt, root_pos, back_x, flight_ratio, s)
 
 	_sync_visuals()
 
 
-func _update_free(dt: float, root_pos: Vector2, back_x: float, flight_ratio: float) -> void:
+func _update_free(dt: float, root_pos: Vector2, back_x: float, flight_ratio: float, s: float) -> void:
 	for i in range(1, segment_count + 1):
 		var t := float(i) / float(segment_count)
 		var vel := (points[i] - prev_points[i]) * damping
 		prev_points[i] = points[i]
 
 		var accel := Vector2.ZERO
-		accel.y += gravity * (0.4 + 0.6 * t)
+		accel.y += gravity * s * (0.4 + 0.6 * t)
 		accel += -owner_velocity * wind_drag * (0.35 + 0.65 * t)
 
 		var idle_weight := 1.0 - flight_ratio * 0.72
-		accel.x += back_x * idle_back_force * idle_weight * (0.45 + 0.55 * t)
+		accel.x += back_x * idle_back_force * s * idle_weight * (0.45 + 0.55 * t)
 
 		var phase := _time * (wave_speed + flight_ratio * 2.0) - t * wave_frequency
-		var sway_amp := wave_strength * (0.25 + 0.75 * t) * (1.0 - flight_ratio * 0.45)
+		var sway_amp := wave_strength * s * (0.25 + 0.75 * t) * (1.0 - flight_ratio * 0.45)
 		accel.y += sin(phase) * sway_amp
-		accel.y -= curl_up_tip_strength * idle_weight * pow(t, 2.0)
+		accel.y -= curl_up_tip_strength * s * idle_weight * pow(t, 2.0)
 
 		points[i] += vel + accel * dt * dt
 
-	_solve_constraints(root_pos, back_x, flight_ratio, segment_length)
+	_solve_constraints(root_pos, back_x, flight_ratio, segment_length * s)
 
 
-func _update_strike(dt: float, root_pos: Vector2) -> void:
+func _update_strike(dt: float, root_pos: Vector2, s: float) -> void:
 	if not is_instance_valid(_strike_target):
 		release_carry()
 		return
@@ -179,13 +228,14 @@ func _update_strike(dt: float, root_pos: Vector2) -> void:
 	var progress := clampf(_strike_timer / maxf(strike_duration, 0.02), 0.0, 1.0)
 	# Snappy ease-out lash toward target waist
 	var ease_p := 1.0 - pow(1.0 - progress, 3.0)
-	var target_waist := _strike_target.global_position + _carry_waist_offset
+	var target_scale := _get_target_scale(_strike_target)
+	var target_waist := _strike_target.global_position + _carry_waist_offset * target_scale
 
 	for i in range(1, segment_count + 1):
 		var t := float(i) / float(segment_count)
 		# Whip curve shoots directly to target waist with a slight dramatic arc
 		var direct := root_pos.lerp(target_waist, t * ease_p)
-		var arc := Vector2(0.0, -sin(t * PI) * 8.0 * (1.0 - ease_p * 0.5))
+		var arc := Vector2(0.0, -sin(t * PI) * 8.0 * s * (1.0 - ease_p * 0.5))
 		prev_points[i] = points[i]
 		points[i] = points[i].lerp(direct + arc, 0.65)
 
@@ -198,7 +248,7 @@ func _update_strike(dt: float, root_pos: Vector2) -> void:
 			_strike_callback.call()
 
 
-func _update_carrying(dt: float, root_pos: Vector2, back_x: float, flight_ratio: float) -> void:
+func _update_carrying(dt: float, root_pos: Vector2, back_x: float, flight_ratio: float, s: float) -> void:
 	# Heavier rope simulation: target hangs from the tail tip and trails behind flight
 	for i in range(1, segment_count + 1):
 		var t := float(i) / float(segment_count)
@@ -207,19 +257,19 @@ func _update_carrying(dt: float, root_pos: Vector2, back_x: float, flight_ratio:
 
 		var accel := Vector2.ZERO
 		# Stronger downward pull because an Elf is tied at the tip!
-		accel.y += carry_gravity * (0.3 + 1.2 * pow(t, 1.3))
+		accel.y += carry_gravity * s * (0.3 + 1.2 * pow(t, 1.3))
 		# Trail smoothly behind movement direction
 		accel += -owner_velocity * (wind_drag * 1.15) * (0.3 + 0.7 * t)
 		# Keep slightly behind & below Snatcher when hovering idle so Elf is clearly visible
 		var idle_weight := 1.0 - flight_ratio * 0.7
-		accel.x += back_x * 95.0 * idle_weight * (0.4 + 0.6 * t)
+		accel.x += back_x * 95.0 * s * idle_weight * (0.4 + 0.6 * t)
 		# Small struggle jiggle from the captured Elf at the tip
-		accel.x += sin(_time * 16.0) * 35.0 * pow(t, 2.0)
+		accel.x += sin(_time * 16.0) * 35.0 * s * pow(t, 2.0)
 
 		points[i] += vel + accel * dt * dt
 
 	# Slightly shorter/taut carry length so Elf hangs nicely near Snatcher
-	_solve_constraints(root_pos, back_x, 1.0, segment_length * 0.92)
+	_solve_constraints(root_pos, back_x, 1.0, segment_length * s * 0.92)
 
 
 func _solve_constraints(root_pos: Vector2, back_x: float, flight_ratio: float, seg_len: float) -> void:
@@ -263,14 +313,15 @@ func _sync_visuals() -> void:
 		var back_x := -1.0 if facing_right else 1.0
 		var sway := get_carry_sway_angle()
 		var wrap_center := to_local(tip_pos)
+		var wrap_ratio := _get_target_scale(_carried_target) / maxf(_get_owner_scale(), 0.05)
 		var coil_pts := PackedVector2Array()
 		var steps := 10
-		for s in range(steps + 1):
-			var u := float(s) / float(steps)
+		for s_idx in range(steps + 1):
+			var u := float(s_idx) / float(steps)
 			# Wraps from back side across front of waist (slight diagonal double-coil feel)
 			var angle := lerpf(-PI * 0.15, PI * 1.15, u)
-			var px := cos(angle) * wrap_width * (-back_x)
-			var py := sin(angle) * wrap_height + (u - 0.5) * 2.8
+			var px := cos(angle) * wrap_width * wrap_ratio * (-back_x)
+			var py := sin(angle) * wrap_height * wrap_ratio + (u - 0.5) * 2.8 * wrap_ratio
 			var pt := Vector2(px, py).rotated(sway)
 			coil_pts.append(wrap_center + pt)
 

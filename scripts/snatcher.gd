@@ -28,14 +28,30 @@ var facing_right: bool = true
 var carried_target: Node2D = null
 var _is_striking: bool = false
 var _grab_key_was_down: bool = false
+var _prev_global_pos: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
 	facing_right = default_facing_right
+	_prev_global_pos = global_position
 	_apply_facing()
 	anim_player.play("idle")
 	if tail_physics and tail_physics.has_method("set_motion_state"):
 		tail_physics.set_motion_state(facing_right, Vector2.ZERO)
+
+
+func set_facing_right(is_right: bool) -> void:
+	facing_right = is_right
+	if is_node_ready():
+		_apply_facing()
+
+
+func teleport_to_local(pos: Vector2) -> void:
+	position = pos
+	_prev_global_pos = global_position
+	velocity = Vector2.ZERO
+	if tail_physics and tail_physics.has_method("reset_chain"):
+		tail_physics.reset_chain()
 
 
 func _apply_facing() -> void:
@@ -144,30 +160,47 @@ func release_target() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# Edge-triggered grab/release input
-	var grab_down := _is_grab_pressed()
-	if grab_down and not _grab_key_was_down:
-		toggle_grab()
-	_grab_key_was_down = grab_down
-
-	var input_dir := _get_move_input()
 	var is_carrying := is_instance_valid(carried_target)
-	var active_speed := move_speed * (carry_speed_multiplier if is_carrying else 1.0)
+	var motion_vel := Vector2.ZERO
+	var move_dir := Vector2.ZERO
 
-	velocity = input_dir * active_speed
-	move_and_slide()
+	if control_enabled:
+		# Edge-triggered grab/release input
+		var grab_down := _is_grab_pressed()
+		if grab_down and not _grab_key_was_down:
+			toggle_grab()
+		_grab_key_was_down = grab_down
+
+		var input_dir := _get_move_input()
+		var active_speed := move_speed * (carry_speed_multiplier if is_carrying else 1.0)
+		velocity = input_dir * active_speed
+		move_and_slide()
+		motion_vel = velocity
+		move_dir = input_dir
+	else:
+		# Board/Tween-driven mode: derive velocity from actual global displacement
+		var dt := maxf(delta, 0.001)
+		motion_vel = (global_position - _prev_global_pos) / dt
+		var speed := motion_vel.length()
+		if speed > 8.0:
+			move_dir = motion_vel / maxf(speed, 1.0)
+		else:
+			motion_vel = Vector2.ZERO
+			move_dir = Vector2.ZERO
+
+	_prev_global_pos = global_position
 
 	# Update facing direction when moving horizontally
-	if input_dir.x > 0.05:
+	if move_dir.x > 0.05:
 		facing_right = true
 		_apply_facing()
-	elif input_dir.x < -0.05:
+	elif move_dir.x < -0.05:
 		facing_right = false
 		_apply_facing()
 
 	# Switch between idle and move animations (+ faster wingbeat when carrying an Elf)
 	anim_player.speed_scale = 1.25 if is_carrying else 1.0
-	if input_dir.length() > 0.05:
+	if move_dir.length() > 0.05:
 		if anim_player.current_animation != "move":
 			anim_player.play("move", 0.12)
 	else:
@@ -176,18 +209,20 @@ func _physics_process(delta: float) -> void:
 
 	# Smoothly tilt body toward flight direction
 	var t := clampf(tilt_smoothness * delta, 0.0, 1.0)
-	var target_tilt := deg_to_rad(input_dir.x * max_tilt_degrees)
+	var target_tilt := deg_to_rad(move_dir.x * max_tilt_degrees)
 	visuals.rotation = lerp_angle(visuals.rotation, target_tilt, t)
 
 	# Feed facing & velocity into tail physics
 	if tail_physics and tail_physics.has_method("set_motion_state"):
-		tail_physics.set_motion_state(facing_right, velocity)
+		tail_physics.set_motion_state(facing_right, motion_vel)
 
 	# Keep captured target tied neatly to the tail tip with natural pendulum sway
 	if is_carrying and tail_physics and tail_physics.has_method("get_tip_position"):
 		var tip_pos: Vector2 = tail_physics.get_tip_position()
+		var target_scale := carried_target.global_scale.abs()
+		var scaled_offset := Vector2(carry_waist_offset.x * target_scale.x, carry_waist_offset.y * target_scale.y)
 		carried_target.global_position = carried_target.global_position.lerp(
-			tip_pos - carry_waist_offset,
+			tip_pos - scaled_offset,
 			clampf(22.0 * delta, 0.0, 1.0)
 		)
 		var sway: float = tail_physics.get_carry_sway_angle()
