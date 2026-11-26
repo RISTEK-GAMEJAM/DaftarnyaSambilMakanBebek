@@ -1,7 +1,10 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cul7g3w44b5pn"]
 
 [ext_resource type="PackedScene" path="res://scenes/levels/labirin_a.tscn" id="1_ygokr"]
 [ext_resource type="PackedScene" path="res://scenes/levels/labirin_b.tscn" id="2_sd88a"]
+[ext_resource type="Script" uid="uid://bp2jhdtn36h3m" path="res://scripts/papan_labirin_kembar.gd" id="3_ctrl"]
+[ext_resource type="FontFile" uid="uid://bgh7u0mkjtnei" path="res://assets/fonts/Silkscreen-Bold.ttf" id="4_silkscreen"]
+[ext_resource type="FontFile" uid="uid://dxni5uct66roo" path="res://assets/fonts/VT323-Regular.ttf" id="5_vt323"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tlaya"]
 bg_color = Color(0.078431375, 0.105882354, 0.10980392, 1)
@@ -56,20 +59,22 @@ corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
 [node name="PapanLabirinKembar" type="Node2D" unique_id=874081355]
+script = ExtResource("3_ctrl")
 
 [node name="Latar" type="Panel" parent="." unique_id=1811522319]
 offset_right = 1440.0
-offset_bottom = 792.0
+offset_bottom = 900.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_tlaya")
 
 [node name="Judul" type="Label" parent="." unique_id=1464717827]
 offset_left = 32.0
-offset_top = 32.0
-offset_right = 32.0
-offset_bottom = 32.0
-theme_override_font_sizes/font_size = 37
+offset_top = 34.0
+offset_right = 590.0
+offset_bottom = 78.0
 theme_override_colors/font_color = Color(0.95686275, 0.9372549, 0.8745098, 1)
+theme_override_fonts/font = ExtResource("4_silkscreen")
+theme_override_font_sizes/font_size = 24
 text = "Twin-Labyrinth: Gambit & Escape"
 
 [node name="PanelA" type="Panel" parent="." unique_id=2140865079]
@@ -82,22 +87,24 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_gphrd")
 
 [node name="Nama" type="Label" parent="PanelA" unique_id=1365479462]
 layout_mode = 0
-offset_left = 24.0
+offset_left = 20.0
 offset_top = 13.0
-offset_right = 24.0
-offset_bottom = 13.0
-theme_override_font_sizes/font_size = 25
+offset_right = 420.0
+offset_bottom = 44.0
 theme_override_colors/font_color = Color(0.54901963, 0.77254903, 1, 1)
+theme_override_fonts/font = ExtResource("4_silkscreen")
+theme_override_font_sizes/font_size = 18
 text = "Labirin A"
 
 [node name="JumlahPetak" type="Label" parent="PanelA" unique_id=1731308010]
 layout_mode = 0
-offset_left = 532.0
-offset_top = 21.0
+offset_left = 440.0
+offset_top = 15.0
 offset_right = 648.0
 offset_bottom = 44.0
-theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.65882355, 0.70980394, 0.6901961, 1)
+theme_override_fonts/font = ExtResource("5_vt323")
+theme_override_font_sizes/font_size = 24
 text = "52 petak"
 horizontal_alignment = 2
 
@@ -110,7 +117,7 @@ offset_bottom = 644.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_nspra")
 
-[node name="LabirinA" type="Node2D" parent="PanelA/Bidang" unique_id=1877044492 instance=ExtResource("1_ygokr")]
+[node name="LabirinA" parent="PanelA/Bidang" unique_id=1877044492 instance=ExtResource("1_ygokr")]
 position = Vector2(8, 8)
 scale = Vector2(2, 2)
 
@@ -124,22 +131,24 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_dxcf2")
 
 [node name="Nama" type="Label" parent="PanelB" unique_id=557237465]
 layout_mode = 0
-offset_left = 24.0
+offset_left = 20.0
 offset_top = 13.0
-offset_right = 24.0
-offset_bottom = 13.0
-theme_override_font_sizes/font_size = 25
+offset_right = 420.0
+offset_bottom = 44.0
 theme_override_colors/font_color = Color(0.6745098, 0.8862745, 0.6392157, 1)
+theme_override_fonts/font = ExtResource("4_silkscreen")
+theme_override_font_sizes/font_size = 18
 text = "Labirin B"
 
 [node name="JumlahPetak" type="Label" parent="PanelB" unique_id=1438467104]
 layout_mode = 0
-offset_left = 532.0
-offset_top = 21.0
+offset_left = 440.0
+offset_top = 15.0
 offset_right = 648.0
 offset_bottom = 44.0
-theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.65882355, 0.70980394, 0.6901961, 1)
+theme_override_fonts/font = ExtResource("5_vt323")
+theme_override_font_sizes/font_size = 24
 text = "51 petak"
 horizontal_alignment = 2
 
@@ -152,6 +161,6 @@ offset_bottom = 644.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_k5odh")
 
-[node name="LabirinB" type="Node2D" parent="PanelB/Bidang" unique_id=942562509 instance=ExtResource("2_sd88a")]
+[node name="LabirinB" parent="PanelB/Bidang" unique_id=942562509 instance=ExtResource("2_sd88a")]
 position = Vector2(8, 8)
 scale = Vector2(2, 2)
