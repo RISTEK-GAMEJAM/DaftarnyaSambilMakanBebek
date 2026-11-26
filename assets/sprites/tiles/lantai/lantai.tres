@@ -1,6 +1,6 @@
-[gd_resource type="TileSet" load_steps=3 format=3]
+[gd_resource type="TileSet" format=3 uid="uid://blieppvvxbxoj"]
 
-[ext_resource type="Texture2D" path="res://assets/sprites/tiles/lantai/lantai.png" id="1_atlas"]
+[ext_resource type="Texture2D" uid="uid://dnacwolab8xun" path="res://assets/sprites/tiles/lantai/lantai.png" id="1_atlas"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_lantai"]
 resource_name = "Lantai"
