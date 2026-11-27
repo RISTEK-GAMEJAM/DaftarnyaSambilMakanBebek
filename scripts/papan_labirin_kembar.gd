@@ -84,7 +84,7 @@ func _ready() -> void:
 	_build_hud()
 	_options = Options.new()
 	_duel = Game24.new()
-	_duel.duel_time_limit = duel_time_limit
+	_duel.duel_time_limit = float(data.get("duel_time", duel_time_limit))
 	_interface.add_child(_duel)
 	_duel.finished_duel.connect(_resolve_duel)
 	_duel.options_requested.connect(_open_options)

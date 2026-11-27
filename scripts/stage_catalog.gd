@@ -9,7 +9,7 @@ const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 # Set a stage's layouts to two hand-authored grids to replace its generated maps.
 const STAGES := [
 	{
-		"size": Vector2i(13, 9), "sight": 6, "chase": 1,
+		"size": Vector2i(13, 9), "sight": 6, "chase": 1, "duel_time": 60.0,
 		"layouts": [
 			[
 				"#############",
@@ -35,11 +35,11 @@ const STAGES := [
 			],
 		],
 	},
-	{"size": Vector2i(15, 11), "sight": 5, "chase": 2, "seeds": [1741, 4973], "safe": 4},
-	{"size": Vector2i(17, 13), "sight": 5, "chase": 3, "seeds": [2783, 5651], "safe": 4},
-	{"size": Vector2i(19, 15), "sight": 4, "chase": 4, "seeds": [3329, 6491], "safe": 3},
-	{"size": Vector2i(21, 17), "sight": 4, "chase": 5, "seeds": [4409, 7603], "safe": 3},
-	{"size": Vector2i(23, 19), "sight": 3, "chase": 6, "seeds": [5081, 8627], "safe": 2},
+	{"size": Vector2i(15, 11), "sight": 5, "chase": 2, "duel_time": 60.0, "seeds": [1741, 4973], "safe": 4},
+	{"size": Vector2i(17, 13), "sight": 5, "chase": 3, "duel_time": 50.0, "seeds": [2783, 5651], "safe": 4},
+	{"size": Vector2i(19, 15), "sight": 4, "chase": 4, "duel_time": 40.0, "seeds": [3329, 6491], "safe": 3},
+	{"size": Vector2i(21, 17), "sight": 4, "chase": 5, "duel_time": 30.0, "seeds": [4409, 7603], "safe": 3},
+	{"size": Vector2i(23, 19), "sight": 3, "chase": 6, "duel_time": 25.0, "seeds": [5081, 8627], "safe": 2},
 ]
 
 
