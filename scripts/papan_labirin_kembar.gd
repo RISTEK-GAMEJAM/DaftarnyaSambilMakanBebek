@@ -6,6 +6,7 @@ const PovBoard = preload("res://scripts/pov_board.gd")
 const Options = preload("res://scripts/options_panel.gd")
 const Game24 = preload("res://scripts/game_24_panel.gd")
 const Tutorial = preload("res://scripts/stage_intro.gd")
+const Jumpscare = preload("res://scripts/snatcher_jumpscare.gd")
 
 const BOARD_AREA := Rect2(0, 104, 1440, 680)
 const BOARD_ZOOM := 2.3
@@ -24,6 +25,7 @@ var _cover: ColorRect
 var _options: Options
 var _duel: Game24
 var _intro: Tutorial
+var _jumpscare: Jumpscare
 var _stage_label: Label
 var _pov_label: Label
 var _round_label: Label
@@ -91,6 +93,8 @@ func _ready() -> void:
 		_interface.add_child(_intro)
 	_build_result()
 	_interface.add_child(_options)
+	_jumpscare = Jumpscare.new()
+	_interface.add_child(_jumpscare)
 	_options.visibility_changed.connect(func() -> void: _duel.timer_paused = _options.visible)
 	Lang.language_changed.connect(_refresh)
 	_refresh()
@@ -328,6 +332,8 @@ func _settle_phase() -> void:
 			var lane: int = duel["lane"]
 			await _show_lane(lane)
 			await _boards[lane].catch_elf()
+			if is_instance_valid(_jumpscare):
+				await _jumpscare.trigger()
 			_duel.open_duel(duel)
 		TwinLabyrinth.Phase.WON, TwinLabyrinth.Phase.LOST:
 			var won: bool = state["phase"] == TwinLabyrinth.Phase.WON

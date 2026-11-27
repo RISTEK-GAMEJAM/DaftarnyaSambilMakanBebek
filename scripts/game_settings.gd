@@ -69,7 +69,10 @@ func save_audio() -> void:
 
 func play_sound(sound: String) -> void:
 	if not _clips.has(sound):
-		_clips[sound] = _make_clip(SOUNDS[sound])
+		if sound == "jumpscare":
+			_clips[sound] = _make_jumpscare_clip()
+		else:
+			_clips[sound] = _make_clip(SOUNDS[sound])
 	_sfx.stream = _clips[sound]
 	_sfx.play()
 
@@ -92,6 +95,31 @@ func _make_clip(notes: Array) -> AudioStreamWAV:
 			var envelope := minf(progress * 16.0, 1.0) * (1.0 - progress)
 			var tone := sin(TAU * float(notes[note]) * frame / RATE)
 			data.encode_s16((note * NOTE_FRAMES + frame) * 2, int(tone * envelope * 5300.0))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = RATE
+	stream.data = data
+	return stream
+
+
+func _make_jumpscare_clip() -> AudioStreamWAV:
+	const RATE := 22050
+	const TOTAL_FRAMES := 11500 # ~0.52s sharp horror screech + sub-bass slam
+	var data := PackedByteArray()
+	data.resize(TOTAL_FRAMES * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 66613
+	for frame in range(TOTAL_FRAMES):
+		var t := float(frame) / float(RATE)
+		var progress := float(frame) / float(TOTAL_FRAMES)
+		var env := minf(progress * 45.0, 1.0) * pow(1.0 - progress, 0.65)
+		# Sub-bass drop + dissonant tritone screech + sharp noise crack
+		var bass := sin(TAU * lerpf(82.0, 32.0, progress) * t) * 0.55
+		var fm := sin(TAU * 42.0 * t) * 35.0
+		var screech := (sin(TAU * (610.0 + fm) * t) + sin(TAU * (862.0 - fm) * t) + sin(TAU * 1290.0 * t) * 0.5) * 0.28
+		var crack := rng.randf_range(-1.0, 1.0) * maxf(0.0, 1.0 - progress * 5.0) * 0.55
+		var sample := clampf((bass + screech + crack) * env, -1.0, 1.0)
+		data.encode_s16(frame * 2, int(sample * 19000.0))
 	var stream := AudioStreamWAV.new()
 	stream.format = AudioStreamWAV.FORMAT_16_BITS
 	stream.mix_rate = RATE

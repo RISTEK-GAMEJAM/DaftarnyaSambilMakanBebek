@@ -323,6 +323,8 @@ func _drag_toward_lair(lane: int) -> Dictionary:
 		return {"path": walked, "reached_lair": true}
 
 	var path := Board.shortest_path(lane, _runners[lane], spawn, _layouts, SAFE)
+	if path.is_empty():
+		path = Board.shortest_path(lane, _runners[lane], spawn, _layouts)
 	var steps := mini(maxi(_dice.x, _dice.y), path.size())
 	if steps > 0:
 		for i in range(steps):
