@@ -176,8 +176,8 @@ func _refresh(_code: String = "") -> void:
 	_language_button.text = Lang.button_label()
 	_language_button.tooltip_text = Lang.t("lang_tooltip")
 	_options_button.text = Lang.t("menu_options")
-	_stage_button.text = Lang.t("select_stage")
-	_preview_button.text = Lang.t("preview_pov", [_letter(1 - _shown_lane)])
+	_stage_button.text = Lang.t("action_back")
+	_preview_button.text = Lang.t("action_back") if preview else Lang.t("preview_pov", [_letter(1 - _shown_lane)])
 	_preview_button.visible = _game.can_preview()
 	_preview_button.disabled = _busy
 	_roll_button.visible = phase == TwinLabyrinth.Phase.ROLL
@@ -211,7 +211,7 @@ func _letter(lane: int) -> String:
 
 
 func _input_blocked() -> bool:
-	return _busy or _options.visible or _duel.visible or (is_instance_valid(_intro) and _intro.visible) or _result.get_parent().visible
+	return _busy or _options.visible or _duel.visible or (is_instance_valid(_intro) and _intro.visible) or (is_instance_valid(_jumpscare) and _jumpscare.visible) or _result.get_parent().visible
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -221,8 +221,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		if BOARD_AREA.has_point(event.position):
 			var position_on_board: Vector2 = get_canvas_transform().affine_inverse() * event.position
 			_step(_boards[_shown_lane].cell_at(position_on_board))
-	elif event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_SPACE:
-		_roll()
+	elif event is InputEventKey and event.pressed and not event.echo:
+		var kev := event as InputEventKey
+		var dir := Vector2i.ZERO
+		match kev.keycode:
+			KEY_SPACE:
+				get_viewport().set_input_as_handled()
+				_roll()
+				return
+			KEY_UP:
+				dir = Vector2i.UP
+			KEY_DOWN:
+				dir = Vector2i.DOWN
+			KEY_LEFT:
+				dir = Vector2i.LEFT
+			KEY_RIGHT:
+				dir = Vector2i.RIGHT
+		if dir != Vector2i.ZERO:
+			var state := _game.get_state()
+			var lane: int = state["active_lane"]
+			if int(state["phase"]) == TwinLabyrinth.Phase.MOVE and _shown_lane == lane:
+				var origin: Vector2i = state["runners"][lane]
+				get_viewport().set_input_as_handled()
+				_step(origin + dir)
 
 
 func _preview_other() -> void:
@@ -331,8 +352,9 @@ func _settle_phase() -> void:
 			var duel := _game.get_duel()
 			var lane: int = duel["lane"]
 			await _show_lane(lane)
+			var fresh_capture := not is_instance_valid(_boards[lane].snatcher.get("carried_target"))
 			await _boards[lane].catch_elf()
-			if is_instance_valid(_jumpscare):
+			if fresh_capture and is_instance_valid(_jumpscare):
 				await _jumpscare.trigger()
 			_duel.open_duel(duel)
 		TwinLabyrinth.Phase.WON, TwinLabyrinth.Phase.LOST:

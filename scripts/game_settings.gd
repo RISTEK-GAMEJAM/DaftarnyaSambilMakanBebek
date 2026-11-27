@@ -1,7 +1,11 @@
 extends Node
 
 const SETTINGS_FILE := "user://settings.cfg"
-const MUSIC_PATH := "res://assets/audio/bgm.ogg"
+const MUSIC_PATHS := [
+	"res://assets/audio/bgm.ogg",
+	"res://assets/audio/bgm.mp3",
+	"res://assets/audio/bgm.wav",
+]
 const BUS_NAMES := [&"Master", &"Music", &"SFX"]
 const SOUNDS := {
 	"roll": [320.0, 450.0, 590.0],
@@ -35,13 +39,15 @@ func _ready() -> void:
 	_sfx = AudioStreamPlayer.new()
 	_sfx.bus = &"SFX"
 	add_child(_sfx)
-	if ResourceLoader.exists(MUSIC_PATH):
-		var music := AudioStreamPlayer.new()
-		music.stream = load(MUSIC_PATH)
-		music.bus = &"Music"
-		add_child(music)
-		music.finished.connect(music.play)
-		music.play()
+	for mpath in MUSIC_PATHS:
+		if ResourceLoader.exists(mpath):
+			var music := AudioStreamPlayer.new()
+			music.stream = load(mpath)
+			music.bus = &"Music"
+			add_child(music)
+			music.finished.connect(music.play)
+			music.play()
+			break
 
 
 func _exit_tree() -> void:
@@ -69,10 +75,18 @@ func save_audio() -> void:
 
 func play_sound(sound: String) -> void:
 	if not _clips.has(sound):
-		if sound == "jumpscare":
-			_clips[sound] = _make_jumpscare_clip()
-		else:
-			_clips[sound] = _make_clip(SOUNDS[sound])
+		var found := false
+		for ext in ["ogg", "mp3", "wav"]:
+			var p := "res://assets/audio/%s.%s" % [sound, ext]
+			if ResourceLoader.exists(p):
+				_clips[sound] = load(p)
+				found = true
+				break
+		if not found:
+			if sound == "jumpscare":
+				_clips[sound] = _make_jumpscare_clip()
+			else:
+				_clips[sound] = _make_clip(SOUNDS[sound])
 	_sfx.stream = _clips[sound]
 	_sfx.play()
 

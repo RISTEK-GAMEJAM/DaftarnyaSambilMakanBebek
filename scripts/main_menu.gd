@@ -237,7 +237,7 @@ func _build_credits() -> void:
 	layer.z_index = 70
 	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(layer)
-	_credits = UI.modal(layer, Rect2(318, 130, 804, 636))
+	_credits = UI.modal(layer, Rect2(318, 116, 804, 668))
 	_credits.get_parent().hide()
 
 	var heading := UI.label(_credits, "", 32, UI.GOLD, true)
@@ -262,13 +262,13 @@ func _build_credits() -> void:
 		_credit_roles.append(role)
 
 	var engine := UI.label(_credits, "", 21, UI.MUTED)
-	UI.place(engine, Rect2(38, 456, 728, 26))
-	var engine_detail := UI.label(_credits, "Godot Engine 4.7.2, Aseprite\nSilkscreen & VT323 (Google Fonts, SIL OFL)", 24)
-	UI.place(engine_detail, Rect2(38, 484, 728, 62))
+	UI.place(engine, Rect2(38, 454, 728, 26))
+	var engine_detail := UI.label(_credits, "Godot Engine 4.7.2, Aseprite\nSilkscreen & VT323 (Google Fonts, SIL OFL)\nJumpscare SFX: Jump Scare Sound 2 — freesound_community (Pixabay)", 23)
+	UI.place(engine_detail, Rect2(38, 482, 728, 92))
 	_credit_labels = [heading, team_label, jam, contributor_label, engine]
 
 	_close_credits = UI.button(_credits, "", func() -> void: _credits.get_parent().hide(), PixelButton.Variant.GOLD, 24)
-	UI.place(_close_credits, Rect2(586, 560, 180, 48))
+	UI.place(_close_credits, Rect2(586, 592, 180, 48))
 
 
 func _localize(_code: String = "") -> void:
