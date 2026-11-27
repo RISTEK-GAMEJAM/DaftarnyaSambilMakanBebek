@@ -13,24 +13,39 @@ var _next: Button
 
 
 func _ready() -> void:
+	# Azkal's 4-page Tutorial Dialogue placed in Hanif's bottom RPG dialogue box location
+	# so the player can clearly see the labyrinth & Elf above while reading!
 	z_index = 50
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var panel := UI.modal(self, Rect2(340, 267, 760, 366))
-	_title = UI.label(panel, "", 15, UI.GOLD, true)
-	UI.place(_title, Rect2(35, 24, 600, 24))
-	_speaker = UI.label(panel, "", 26, UI.A, true)
-	UI.place(_speaker, Rect2(35, 57, 690, 39))
-	UI.box(panel, Rect2(35, 108, 690, 1), UI.LINE)
-	_body = UI.label(panel, "", 29)
+	position = Vector2.ZERO
+	size = UI.SCREEN
+	mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var panel := UI.box(self, Rect2(160, 586, 1120, 186), Color(0.055, 0.080, 0.112, 0.96), UI.GOLD)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.055, 0.080, 0.112, 0.96)
+	style.border_color = UI.GOLD
+	style.set_border_width_all(3)
+	panel.add_theme_stylebox_override("panel", style)
+
+	_title = UI.label(panel, "", 13, UI.GOLD, true)
+	UI.place(_title, Rect2(26, 14, 300, 20))
+	_speaker = UI.label(panel, "", 20, UI.A, true)
+	UI.place(_speaker, Rect2(26, 36, 400, 28))
+	_counter = UI.label(panel, "", 20, UI.MUTED)
+	_counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	UI.place(_counter, Rect2(960, 16, 134, 28))
+	UI.box(panel, Rect2(26, 68, 1068, 1), UI.LINE)
+
+	_body = UI.label(panel, "", 26)
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	UI.place(_body, Rect2(35, 129, 690, 130))
-	_counter = UI.label(panel, "", 22, UI.MUTED)
-	UI.place(_counter, Rect2(35, 292, 96, 46))
-	_previous = UI.button(panel, "", _previous_page)
-	_next = UI.button(panel, "", _next_page, PixelButton.Variant.GOLD)
-	UI.place(_previous, Rect2(374, 292, 164, 46))
-	UI.place(_next, Rect2(550, 292, 175, 46))
+	UI.place(_body, Rect2(26, 78, 724, 96))
+
+	_previous = UI.button(panel, "", _previous_page, PixelButton.Variant.SLATE, 22)
+	_next = UI.button(panel, "", _next_page, PixelButton.Variant.BRIGHT_GOLD, 22)
+	UI.place(_previous, Rect2(768, 122, 148, 46))
+	UI.place(_next, Rect2(928, 122, 166, 46))
+
 	Lang.language_changed.connect(_refresh)
 	_refresh()
 
@@ -57,3 +72,13 @@ func _next_page() -> void:
 	else:
 		_page += 1
 		_refresh()
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var kev := event as InputEventKey
+		if kev.keycode == KEY_SPACE or kev.keycode == KEY_ENTER:
+			get_viewport().set_input_as_handled()
+			_next_page()

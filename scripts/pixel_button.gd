@@ -1,30 +1,35 @@
 class_name PixelButton
 extends Button
 
-enum Variant { GOLD, EMERALD, SLATE, CRIMSON, CARD, CARD_SELECTED }
+enum Variant { GOLD, EMERALD, SLATE, CRIMSON, CARD, CARD_SELECTED, CYAN, BRIGHT_GOLD }
 
 const FONT_BODY: FontFile = preload("res://assets/fonts/VT323-Regular.ttf")
+
+const TEX_CYAN: Texture2D = preload("res://assets/sprites/ui/buttons/start_button.png")
+const TEX_BRIGHT_GOLD: Texture2D = preload("res://assets/sprites/ui/buttons/tutorial_and_options_button.png")
+const TEX_GOLD: Texture2D = preload("res://assets/sprites/ui/buttons/credit_button.png")
+const TEX_CRIMSON: Texture2D = preload("res://assets/sprites/ui/buttons/exit_button.png")
+const TEX_SLATE: Texture2D = preload("res://assets/sprites/ui/buttons/hud_or_utility_button.png")
 
 @export var variant: Variant = Variant.SLATE:
 	set(v):
 		variant = v
 		_apply_text_colors()
-		_redraw_bg()
+		_refresh_patch()
 
 @export var pixel_unit: float = 2.0:
 	set(v):
 		pixel_unit = maxf(v, 1.0)
 		_apply_content_margins()
-		_redraw_bg()
+		_refresh_patch()
 
 @export var show_rivets: bool = true:
 	set(v):
 		show_rivets = v
-		_redraw_bg()
 
 var _is_hovered: bool = false
 var _is_down: bool = false
-var _bg: Control = null
+var _patch: NinePatchRect = null
 
 
 func _init() -> void:
@@ -34,7 +39,7 @@ func _init() -> void:
 
 func _ready() -> void:
 	add_theme_font_override("font", FONT_BODY)
-	_ensure_bg()
+	_ensure_patch()
 	_apply_empty_styles()
 	_apply_text_colors()
 	_apply_content_margins()
@@ -42,30 +47,63 @@ func _ready() -> void:
 	mouse_exited.connect(_on_mouse_exited)
 	button_down.connect(_on_button_down)
 	button_up.connect(_on_button_up)
-	resized.connect(_redraw_bg)
-	_redraw_bg()
+	resized.connect(_refresh_patch)
+	_refresh_patch()
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_DRAW or what == NOTIFICATION_RESIZED or what == NOTIFICATION_VISIBILITY_CHANGED:
-		_redraw_bg()
+		_refresh_patch()
 
 
-func _ensure_bg() -> void:
-	if _bg != null:
+func _ensure_patch() -> void:
+	if _patch != null:
 		return
-	_bg = Control.new()
-	_bg.name = "PixelBevelBg"
-	_bg.show_behind_parent = true
-	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_bg.draw.connect(_draw_bevel)
-	add_child(_bg)
+	_patch = NinePatchRect.new()
+	_patch.name = "CustomButtonPatch"
+	_patch.show_behind_parent = true
+	_patch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_patch.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_patch.patch_margin_left = 7
+	_patch.patch_margin_top = 7
+	_patch.patch_margin_right = 6
+	_patch.patch_margin_bottom = 6
+	_patch.axis_stretch_horizontal = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
+	_patch.axis_stretch_vertical = NinePatchRect.AXIS_STRETCH_MODE_STRETCH
+	add_child(_patch)
 
 
-func _redraw_bg() -> void:
-	if _bg != null:
-		_bg.queue_redraw()
+func _texture_for_variant() -> Texture2D:
+	match variant:
+		Variant.CYAN, Variant.EMERALD, Variant.CARD_SELECTED:
+			return TEX_CYAN
+		Variant.BRIGHT_GOLD:
+			return TEX_BRIGHT_GOLD
+		Variant.GOLD:
+			return TEX_GOLD
+		Variant.CRIMSON:
+			return TEX_CRIMSON
+		_:
+			return TEX_SLATE
+
+
+func _refresh_patch() -> void:
+	if _patch == null:
+		return
+	_patch.texture = _texture_for_variant()
+	var sc := 2.0 if (size.x >= 32.0 and size.y >= 28.0) else 1.0
+	_patch.scale = Vector2(sc, sc)
+	_patch.size = Vector2(maxf(14.0, size.x / sc), maxf(14.0, size.y / sc))
+	_patch.position = Vector2(0.0, 2.0 if (_is_down and not disabled) else 0.0)
+
+	if disabled:
+		_patch.modulate = Color(0.54, 0.57, 0.60, 0.72)
+	elif _is_down:
+		_patch.modulate = Color(0.88, 0.88, 0.88, 1.0)
+	elif _is_hovered:
+		_patch.modulate = Color(1.13, 1.13, 1.13, 1.0)
+	else:
+		_patch.modulate = Color(1.0, 1.0, 1.0, 1.0)
 
 
 func configure(p_variant: Variant, font_size: int = 24, p_pixel_unit: float = 2.0, p_rivets: bool = true) -> void:
@@ -77,7 +115,7 @@ func configure(p_variant: Variant, font_size: int = 24, p_pixel_unit: float = 2.
 	_apply_empty_styles()
 	_apply_text_colors()
 	_apply_content_margins()
-	_redraw_bg()
+	_refresh_patch()
 
 
 func _apply_empty_styles() -> void:
@@ -86,13 +124,13 @@ func _apply_empty_styles() -> void:
 		empty.content_margin_left = 14.0
 		empty.content_margin_right = 14.0
 		empty.content_margin_top = 4.0
-		empty.content_margin_bottom = 4.0 + pixel_unit * 2.0
+		empty.content_margin_bottom = 6.0
 		add_theme_stylebox_override(state, empty)
 
 
 func _apply_content_margins() -> void:
-	var pad_x := 14.0 if show_rivets else 8.0
-	var press_shift := pixel_unit if _is_down else 0.0
+	var pad_x := 12.0
+	var press_shift := 2.0 if (_is_down and not disabled) else 0.0
 	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
 		var sb := get_theme_stylebox(state)
 		if sb is StyleBoxEmpty:
@@ -100,182 +138,37 @@ func _apply_content_margins() -> void:
 			e.content_margin_left = pad_x
 			e.content_margin_right = pad_x
 			e.content_margin_top = 4.0 + press_shift
-			e.content_margin_bottom = 4.0 + pixel_unit * 2.0 - press_shift
+			e.content_margin_bottom = 6.0 - press_shift
 
 
 func _apply_text_colors() -> void:
-	var normal_col := Color(0.96, 0.94, 0.86, 1.0)
-	var hover_col := Color(1.0, 0.97, 0.78, 1.0)
-	if variant == Variant.GOLD:
-		normal_col = Color(1.0, 0.98, 0.88, 1.0)
-		hover_col = Color(1.0, 1.0, 0.94, 1.0)
+	var normal_col := Color(0.97, 0.96, 0.90, 1.0)
+	var hover_col := Color(1.0, 0.99, 0.86, 1.0)
+	var outline_col := Color(0.04, 0.06, 0.08, 0.96)
+	if variant == Variant.BRIGHT_GOLD:
+		normal_col = Color(1.0, 0.99, 0.92, 1.0)
+		outline_col = Color(0.18, 0.10, 0.02, 0.98)
+	elif variant == Variant.CYAN or variant == Variant.EMERALD:
+		normal_col = Color(0.98, 1.0, 1.0, 1.0)
+		outline_col = Color(0.03, 0.12, 0.16, 0.98)
 	add_theme_color_override("font_color", normal_col)
 	add_theme_color_override("font_hover_color", hover_col)
-	add_theme_color_override("font_pressed_color", Color(0.98, 0.88, 0.54, 1.0))
-	add_theme_color_override("font_disabled_color", Color(0.48, 0.54, 0.54, 0.85))
-	add_theme_color_override("font_outline_color", Color(0.05, 0.06, 0.07, 0.95))
-	add_theme_constant_override("outline_size", 3)
-
-
-func _get_palette() -> Dictionary:
-	if disabled:
-		return {
-			"outline": Color(0.05, 0.06, 0.07, 0.85),
-			"face": Color(0.12, 0.15, 0.16, 0.85),
-			"highlight": Color(0.18, 0.22, 0.23, 0.85),
-			"shade": Color(0.08, 0.10, 0.11, 0.85),
-			"lip": Color(0.07, 0.09, 0.10, 0.85),
-			"rivet": Color(0.24, 0.29, 0.30, 0.75),
-		}
-
-	var pal := {}
-	match variant:
-		Variant.GOLD:
-			pal = {
-				"outline": Color(0.06, 0.04, 0.02, 1.0),
-				"face": Color(0.58, 0.41, 0.14, 1.0),
-				"highlight": Color(0.92, 0.76, 0.36, 1.0),
-				"shade": Color(0.40, 0.27, 0.09, 1.0),
-				"lip": Color(0.30, 0.19, 0.06, 1.0),
-				"rivet": Color(1.0, 0.92, 0.62, 1.0),
-			}
-		Variant.EMERALD:
-			pal = {
-				"outline": Color(0.04, 0.07, 0.06, 1.0),
-				"face": Color(0.14, 0.34, 0.28, 1.0),
-				"highlight": Color(0.32, 0.64, 0.52, 1.0),
-				"shade": Color(0.09, 0.23, 0.19, 1.0),
-				"lip": Color(0.07, 0.17, 0.14, 1.0),
-				"rivet": Color(0.62, 0.92, 0.78, 1.0),
-			}
-		Variant.CRIMSON:
-			pal = {
-				"outline": Color(0.07, 0.03, 0.04, 1.0),
-				"face": Color(0.38, 0.12, 0.18, 1.0),
-				"highlight": Color(0.68, 0.26, 0.34, 1.0),
-				"shade": Color(0.25, 0.07, 0.12, 1.0),
-				"lip": Color(0.18, 0.05, 0.08, 1.0),
-				"rivet": Color(0.94, 0.52, 0.58, 1.0),
-			}
-		Variant.CARD:
-			pal = {
-				"outline": Color(0.05, 0.07, 0.08, 1.0),
-				"face": Color(0.17, 0.22, 0.25, 1.0),
-				"highlight": Color(0.38, 0.48, 0.52, 1.0),
-				"shade": Color(0.11, 0.15, 0.17, 1.0),
-				"lip": Color(0.08, 0.11, 0.13, 1.0),
-				"rivet": Color(0.76, 0.84, 0.84, 0.85),
-			}
-		Variant.CARD_SELECTED:
-			pal = {
-				"outline": Color(0.05, 0.08, 0.10, 1.0),
-				"face": Color(0.20, 0.42, 0.52, 1.0),
-				"highlight": Color(0.55, 0.88, 0.96, 1.0),
-				"shade": Color(0.13, 0.29, 0.37, 1.0),
-				"lip": Color(0.09, 0.21, 0.27, 1.0),
-				"rivet": Color(0.92, 0.98, 1.0, 1.0),
-			}
-		_:
-			pal = {
-				"outline": Color(0.05, 0.07, 0.08, 1.0),
-				"face": Color(0.18, 0.25, 0.27, 1.0),
-				"highlight": Color(0.36, 0.48, 0.50, 1.0),
-				"shade": Color(0.12, 0.17, 0.19, 1.0),
-				"lip": Color(0.09, 0.13, 0.14, 1.0),
-				"rivet": Color(0.66, 0.78, 0.78, 0.95),
-			}
-
-	if _is_hovered and not _is_down:
-		pal["face"] = (pal["face"] as Color).lightened(0.14)
-		pal["highlight"] = (pal["highlight"] as Color).lightened(0.18)
-		pal["rivet"] = Color(1.0, 0.92, 0.56, 1.0)
-	elif _is_down:
-		pal["face"] = (pal["face"] as Color).darkened(0.10)
-
-	return pal
-
-
-func _draw_bevel() -> void:
-	if _bg == null:
-		return
-	var p := pixel_unit
-	var w := _bg.size.x
-	var h := _bg.size.y
-	if w < p * 6.0 or h < p * 6.0:
-		return
-
-	var pal := _get_palette()
-	var col_outline: Color = pal["outline"]
-	var col_face: Color = pal["face"]
-	var col_hi: Color = pal["highlight"]
-	var col_shade: Color = pal["shade"]
-	var col_lip: Color = pal["lip"]
-	var col_rivet: Color = pal["rivet"]
-
-	# Hard unblurred pixel drop shadow below the button
-	var shadow_col := Color(0.02, 0.03, 0.04, 0.70)
-	_bg.draw_rect(Rect2(p * 2.0, h - p, w - p * 3.0, p), shadow_col)
-
-	var top_y := p if _is_down else 0.0
-	var lip_h := p if _is_down else p * 2.0
-	var bot_y := h - p
-	var body_h := bot_y - top_y
-	if body_h < p * 4.0:
-		return
-
-	# 1. Outer notched pixel silhouette (outline)
-	_bg.draw_rect(Rect2(p, top_y, w - p * 2.0, body_h), col_outline)
-	_bg.draw_rect(Rect2(0.0, top_y + p, w, body_h - p * 2.0), col_outline)
-
-	# 2. 3D raised bottom lip (extrusion inside outline)
-	var inner_x := p
-	var inner_w := w - p * 2.0
-	var lip_y := bot_y - p - lip_h
-	_bg.draw_rect(Rect2(inner_x, lip_y, inner_w, lip_h), col_lip)
-
-	# 3. Main button face above the 3D lip
-	var face_y := top_y + p
-	var face_h := lip_y - face_y
-	if face_h > 0.0:
-		_bg.draw_rect(Rect2(inner_x, face_y, inner_w, face_h), col_face)
-
-		# Top bright pixel highlight bar
-		_bg.draw_rect(Rect2(inner_x + p, face_y, inner_w - p * 2.0, p), col_hi)
-		# Left subtle highlight edge
-		_bg.draw_rect(Rect2(inner_x, face_y + p, p, maxf(0.0, face_h - p * 2.0)), col_hi.darkened(0.22))
-		# Bottom inner shade strip just above the 3D lip
-		if face_h >= p * 3.0:
-			_bg.draw_rect(Rect2(inner_x, lip_y - p, inner_w, p), col_shade)
-		# Right inner shade edge
-		_bg.draw_rect(Rect2(inner_x + inner_w - p, face_y + p, p, maxf(0.0, face_h - p)), col_shade)
-
-		# 4 crisp pixel corner rivets on wide buttons
-		if show_rivets and inner_w >= p * 14.0 and face_h >= p * 6.0:
-			var rx_l := inner_x + p * 2.0
-			var rx_r := inner_x + inner_w - p * 3.0
-			var ry_t := face_y + p * 2.0
-			var ry_b := lip_y - p * 3.0
-			_bg.draw_rect(Rect2(rx_l, ry_t, p, p), col_rivet)
-			_bg.draw_rect(Rect2(rx_r, ry_t, p, p), col_rivet)
-			if ry_b > ry_t + p:
-				_bg.draw_rect(Rect2(rx_l, ry_b, p, p), col_rivet)
-				_bg.draw_rect(Rect2(rx_r, ry_b, p, p), col_rivet)
-
-	# Subtle golden hover rim glint along top edge
-	if _is_hovered and not disabled and not _is_down:
-		_bg.draw_rect(Rect2(p * 2.0, top_y, w - p * 4.0, p), Color(1.0, 0.90, 0.50, 0.55))
+	add_theme_color_override("font_pressed_color", Color(1.0, 0.94, 0.68, 1.0))
+	add_theme_color_override("font_disabled_color", Color(0.56, 0.62, 0.64, 0.82))
+	add_theme_color_override("font_outline_color", outline_col)
+	add_theme_constant_override("outline_size", 4)
 
 
 func _on_mouse_entered() -> void:
 	_is_hovered = true
-	_redraw_bg()
+	_refresh_patch()
 
 
 func _on_mouse_exited() -> void:
 	_is_hovered = false
 	_is_down = false
 	_apply_content_margins()
-	_redraw_bg()
+	_refresh_patch()
 
 
 func _on_button_down() -> void:
@@ -283,10 +176,10 @@ func _on_button_down() -> void:
 		return
 	_is_down = true
 	_apply_content_margins()
-	_redraw_bg()
+	_refresh_patch()
 
 
 func _on_button_up() -> void:
 	_is_down = false
 	_apply_content_margins()
-	_redraw_bg()
+	_refresh_patch()
