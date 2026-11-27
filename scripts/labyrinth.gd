@@ -99,13 +99,15 @@ static func find_all_tiles(lane: int, marker: String, layouts: Array = LAYOUTS) 
 
 
 # Return the steps after start, including destination. Adjacent tiles use four directions.
-static func shortest_path(lane: int, start: Vector2i, destination: Vector2i, layouts: Array = LAYOUTS) -> Array[Vector2i]:
+static func shortest_path(lane: int, start: Vector2i, destination: Vector2i, layouts: Array = LAYOUTS, blocked_marker: String = "") -> Array[Vector2i]:
 	var path: Array[Vector2i] = []
 	var frontier: Array[Vector2i] = [start]
 	var previous := {start: start}
+	var head := 0
 
-	while not frontier.is_empty():
-		var cell: Vector2i = frontier.pop_front()
+	while head < frontier.size():
+		var cell := frontier[head]
+		head += 1
 		if cell == destination:
 			while cell != start:
 				path.push_front(cell)
@@ -113,7 +115,47 @@ static func shortest_path(lane: int, start: Vector2i, destination: Vector2i, lay
 			return path
 		for direction in DIRECTIONS:
 			var neighbor: Vector2i = cell + direction
-			if tile(lane, neighbor, layouts) != "#" and not previous.has(neighbor):
+			var marker := tile(lane, neighbor, layouts)
+			if marker != "#" and marker != blocked_marker and not previous.has(neighbor):
 				previous[neighbor] = cell
 				frontier.append(neighbor)
 	return path
+
+
+static func visible_cells(lane: int, origin: Vector2i, radius: int, layouts: Array) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	for y in range(-radius, radius + 1):
+		for x in range(-radius, radius + 1):
+			var offset := Vector2i(x, y)
+			var target := origin + offset
+			if offset.length_squared() <= radius * radius and tile(lane, target, layouts) != "#":
+				if _has_line_of_sight(lane, origin, target, layouts):
+					result.append(target)
+	return result
+
+
+static func _has_line_of_sight(lane: int, origin: Vector2i, target: Vector2i, layouts: Array) -> bool:
+	# Walk the grid boundaries crossed by a ray between the two cell centers.
+	var delta := target - origin
+	var size := delta.abs()
+	var direction := delta.sign()
+	var crossed := Vector2i.ZERO
+	var cell := origin
+	while cell != target:
+		var x_boundary := (crossed.x * 2 + 1) * size.y
+		var y_boundary := (crossed.y * 2 + 1) * size.x
+		if x_boundary == y_boundary:
+			# A ray cannot pass through the corner between two empty abyss tiles.
+			if tile(lane, cell + Vector2i(direction.x, 0), layouts) == "#" and tile(lane, cell + Vector2i(0, direction.y), layouts) == "#":
+				return false
+			cell += direction
+			crossed += Vector2i.ONE
+		elif x_boundary < y_boundary:
+			cell.x += direction.x
+			crossed.x += 1
+		else:
+			cell.y += direction.y
+			crossed.y += 1
+		if tile(lane, cell, layouts) == "#":
+			return false
+	return true

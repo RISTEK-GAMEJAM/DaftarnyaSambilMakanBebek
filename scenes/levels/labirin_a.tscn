@@ -6,23 +6,12 @@
 [ext_resource type="Texture2D" path="res://assets/sprites/tiles/landmarks/safe_spot.png" id="4_safe_spot"]
 [ext_resource type="Texture2D" path="res://assets/sprites/tiles/landmarks/snatcher_lair.png" id="5_snatcher_lair"]
 [ext_resource type="Texture2D" path="res://assets/sprites/tiles/landmarks/exit_gate.png" id="6_exit_gate"]
-[ext_resource type="Texture2D" path="res://assets/sprites/tiles/environment/grass.png" id="7_grass"]
 [ext_resource type="Script" path="res://scripts/labyrinth_env.gd" id="8_env"]
 
 [node name="LabirinA" type="Node2D" unique_id=1877044492]
 
-[node name="Rumput" type="TextureRect" parent="."]
-texture_filter = 1
-texture_repeat = 2
-offset_right = 320.0
-offset_bottom = 288.0
-mouse_filter = 2
-texture = ExtResource("7_grass")
-stretch_mode = 1
-
 [node name="Lingkungan" type="Node2D" parent="."]
 script = ExtResource("8_env")
-start_with_water = true
 
 [node name="Lantai" type="TileMapLayer" parent="." unique_id=1242198198]
 texture_filter = 1

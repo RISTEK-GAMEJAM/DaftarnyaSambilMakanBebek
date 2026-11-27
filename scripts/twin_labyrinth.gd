@@ -15,6 +15,13 @@ const TARGET_24 := 24
 var _layouts: Array = []
 var _phase := Phase.ROLL
 var _dice := Vector2i.ZERO
+var _round := 1
+var _active_lane := 0
+var _turns_left := 0
+var _has_stepped := false
+var _duel_interrupts_move := false
+var _last_duel_round := [0, 0]
+var _chase_limit: int
 var _runners: Array[Vector2i] = []
 var _snatchers: Array[Vector2i] = []
 var _stun := [0, 0]
@@ -30,8 +37,9 @@ var _last_snatcher_paths: Array = [[], []]
 var _last_duel_move: Dictionary = {}
 
 
-func _init(custom_layouts: Array = []) -> void:
+func _init(custom_layouts: Array = [], chase_limit: int = 12) -> void:
 	_layouts = custom_layouts if custom_layouts.size() == 2 else Board.LAYOUTS
+	_chase_limit = chase_limit
 	for lane in range(2):
 		_runners.append(Board.find_tile(lane, START, _layouts))
 		_snatchers.append(Board.find_tile(lane, SPAWN, _layouts))
@@ -52,6 +60,9 @@ func get_echo_steps() -> Vector2i:
 func get_state() -> Dictionary:
 	return {
 		"phase": _phase,
+		"round": _round,
+		"active_lane": _active_lane,
+		"turns_left": _turns_left,
 		"dice": _dice,
 		"echo_steps": get_echo_steps(),
 		"runners": _runners.duplicate(),
@@ -71,6 +82,7 @@ func roll_dice() -> bool:
 	if _phase != Phase.ROLL:
 		return false
 	_dice = Vector2i(randi_range(1, 6), randi_range(1, 6))
+	_turns_left = _dice.x + _dice.y
 	_duel_results.clear()
 	_last_snatcher_paths = [[], []]
 	_last_duel_move = {}
@@ -78,24 +90,52 @@ func roll_dice() -> bool:
 	return true
 
 
-# die_for_a is the index (0 or 1). Each route lists the cells after the runner's current cell.
-func move_runners(die_for_a: int, route_a: Array[Vector2i], route_b: Array[Vector2i]) -> bool:
-	if _phase != Phase.MOVE or die_for_a < 0 or die_for_a > 1:
-		return false
-	if not _valid_route(0, route_a, _dice[die_for_a]):
-		return false
-	if not _valid_route(1, route_b, _dice[1 - die_for_a]):
+func can_preview() -> bool:
+	return _round == 1 and _active_lane == 0 and not _has_stepped and (_phase == Phase.ROLL or _phase == Phase.MOVE)
+
+
+func available_steps() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	if _phase != Phase.MOVE or should_end_turn():
+		return cells
+	for direction in Board.DIRECTIONS:
+		var cell: Vector2i = _runners[_active_lane] + direction
+		if Board.tile(_active_lane, cell, _layouts) != "#":
+			cells.append(cell)
+	return cells
+
+
+func should_end_turn() -> bool:
+	return _phase == Phase.MOVE and (_turns_left == 0 or _escaped[_active_lane] or _captured[_active_lane])
+
+
+func step_runner(cell: Vector2i) -> bool:
+	if cell not in available_steps():
 		return false
 
-	_last_snatcher_paths = [[], []]
-	_last_duel_move = {}
+	_has_stepped = true
+	_turns_left -= 1
+	_set_runner(_active_lane, cell)
+	if _escaped[0] and _escaped[1]:
+		_phase = Phase.WON
+	elif not _escaped[_active_lane] and cell == _snatchers[_active_lane] and _stun[_active_lane] == 0:
+		_queue_duel(_active_lane)
+		_duel_interrupts_move = true
+		_advance()
+	return true
 
-	_move_runner(0, route_a)
-	_move_runner(1, route_b)
 
+func end_turn() -> bool:
+	if _phase != Phase.MOVE:
+		return false
+	if _active_lane == 0:
+		_active_lane = 1
+		return true
+
+	_turns_left = 0
 	var echo := get_echo_steps()
-	_move_snatcher(0, echo.x)
-	_move_snatcher(1, echo.y)
+	for lane in range(2):
+		_move_snatcher(lane, mini(echo[lane], _chase_limit))
 	_advance()
 	return true
 
@@ -118,30 +158,6 @@ func resolve_duel_24(won: bool, fast_bonus: bool = false, player_expr: String = 
 	return true
 
 
-func _valid_route(lane: int, route: Array[Vector2i], steps: int) -> bool:
-	if _escaped[lane] or _captured[lane]:
-		return route.is_empty()
-	if route.is_empty() or route.size() > steps:
-		return false
-
-	var previous := _runners[lane]
-	for index in range(route.size()):
-		var cell := route[index]
-		var marker := Board.tile(lane, cell, _layouts)
-		if previous.distance_squared_to(cell) != 1 or marker == "#":
-			return false
-		if marker == EXIT:
-			return index == route.size() - 1
-		previous = cell
-	return route.size() == steps
-
-
-func _move_runner(lane: int, route: Array[Vector2i]) -> void:
-	if route.is_empty() or _captured[lane]:
-		return
-	_set_runner(lane, route.back())
-
-
 func _set_runner(lane: int, cell: Vector2i) -> void:
 	_runners[lane] = cell
 	_escaped[lane] = Board.tile(lane, cell, _layouts) == EXIT
@@ -149,30 +165,37 @@ func _set_runner(lane: int, cell: Vector2i) -> void:
 
 func _move_snatcher(lane: int, steps: int) -> void:
 	var walked: Array[Vector2i] = []
-	if _escaped[lane]:
-		_last_snatcher_paths[lane] = walked
+	_last_snatcher_paths[lane] = walked
+	if _escaped[lane] or _last_duel_round[lane] == _round:
 		return
-	# Already captured in Snatcher's tail: stay together and duel again until Elf wins Game 24!
 	if _captured[lane]:
-		_last_snatcher_paths[lane] = walked
-		_pending_duels.append(lane)
+		_queue_duel(lane)
+		return
+	if _stun[lane] > 0:
+		_stun[lane] -= 1
 		return
 
 	var target := _runners[lane]
-	var safe := Board.tile(lane, target, _layouts) == SAFE
-	if _stun[lane] > 0:
-		_stun[lane] -= 1
-	elif steps > 0 and _snatchers[lane] != target:
-		var path := Board.shortest_path(lane, _snatchers[lane], target, _layouts)
-		if not path.is_empty():
-			var count := mini(steps, path.size())
-			for i in range(count):
-				walked.append(path[i])
-			_snatchers[lane] = path[count - 1]
-	_last_snatcher_paths[lane] = walked
-	if not safe and _snatchers[lane] == target:
-		_captured[lane] = true
-		_pending_duels.append(lane)
+	var start := _snatchers[lane]
+	if steps > 0 and start != target:
+		var path := Board.shortest_path(lane, start, target, _layouts, SAFE)
+		if path.is_empty():
+			# When a Safe Spot cuts off the target, approach only as far as its near edge.
+			path = Board.shortest_path(lane, start, target, _layouts)
+		for index in range(mini(steps, path.size())):
+			var cell := path[index]
+			if Board.tile(lane, cell, _layouts) == SAFE:
+				break
+			walked.append(cell)
+			_snatchers[lane] = cell
+	if _snatchers[lane] == target:
+		_queue_duel(lane)
+
+
+func _queue_duel(lane: int) -> void:
+	_captured[lane] = true
+	_last_duel_round[lane] = _round
+	_pending_duels.append(lane)
 
 
 func _advance() -> void:
@@ -184,7 +207,15 @@ func _advance() -> void:
 		_phase = Phase.DUEL
 		_deal_solvable_24()
 		return
-	_phase = Phase.WON if _escaped[0] and _escaped[1] else Phase.ROLL
+	if _escaped[0] and _escaped[1]:
+		_phase = Phase.WON
+	elif _duel_interrupts_move:
+		_phase = Phase.MOVE
+		_duel_interrupts_move = false
+	else:
+		_phase = Phase.ROLL
+		_round += 1
+		_active_lane = 0
 
 
 func _deal_solvable_24() -> void:
@@ -291,7 +322,7 @@ func _drag_toward_lair(lane: int) -> Dictionary:
 		_snatchers[lane] = spawn
 		return {"path": walked, "reached_lair": true}
 
-	var path := Board.shortest_path(lane, _runners[lane], spawn, _layouts)
+	var path := Board.shortest_path(lane, _runners[lane], spawn, _layouts, SAFE)
 	var steps := mini(maxi(_dice.x, _dice.y), path.size())
 	if steps > 0:
 		for i in range(steps):
