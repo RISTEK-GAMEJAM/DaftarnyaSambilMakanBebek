@@ -73,7 +73,6 @@ func _ready() -> void:
 
 	# Creepy "BEHIND YOU..." text shown in dead silence on pitch black before the lunge!
 	_behind_lbl = Label.new()
-	_behind_lbl.text = "BEHIND YOU..."
 	_behind_lbl.position = _behind_base_pos
 	_behind_lbl.size = Vector2(SCREEN.x, 92.0)
 	_behind_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -90,6 +89,7 @@ func _ready() -> void:
 
 func trigger() -> void:
 	# PHASE 1: Instant blackout + eerie silence + trembling "BEHIND YOU..." text!
+	_behind_lbl.text = Lang.t("snatcher_behind")
 	visible = true
 	modulate.a = 1.0
 	_holder.visible = false

@@ -23,7 +23,11 @@ var _duel_interrupts_move := false
 var _last_duel_round := [0, 0]
 var _chase_limit: int
 var _runners: Array[Vector2i] = []
+var _exits: Array[Vector2i] = []
 var _snatchers: Array[Vector2i] = []
+var _locked_gates: Array[Dictionary] = [{}, {}]
+var _active_plates: Array[Dictionary] = [{}, {}]
+var _safe_spots: Array[Dictionary] = [{}, {}]
 var _stun := [0, 0]
 var _escaped := [false, false]
 var _captured := [false, false]
@@ -42,7 +46,13 @@ func _init(custom_layouts: Array = [], chase_limit: int = 12) -> void:
 	_chase_limit = chase_limit
 	for lane in range(2):
 		_runners.append(Board.find_tile(lane, START, _layouts))
+		_exits.append(Board.find_tile(lane, EXIT, _layouts))
 		_snatchers.append(Board.find_tile(lane, SPAWN, _layouts))
+		for marker: String in Board.GATE_MARKERS:
+			for cell in Board.find_all_tiles(lane, marker, _layouts):
+				_locked_gates[lane][cell] = marker
+		for cell in Board.find_all_tiles(lane, SAFE, _layouts):
+			_safe_spots[lane][cell] = true
 
 
 func get_layouts() -> Array:
@@ -67,6 +77,9 @@ func get_state() -> Dictionary:
 		"echo_steps": get_echo_steps(),
 		"runners": _runners.duplicate(),
 		"snatchers": _snatchers.duplicate(),
+		"locked_gates": _locked_gates.duplicate(true),
+		"active_plates": _active_plates.duplicate(true),
+		"safe_spots": _safe_spots.duplicate(true),
 		"stun": _stun.duplicate(),
 		"escaped": _escaped.duplicate(),
 		"captured": _captured.duplicate(),
@@ -100,13 +113,29 @@ func available_steps() -> Array[Vector2i]:
 		return cells
 	for direction in Board.DIRECTIONS:
 		var cell: Vector2i = _runners[_active_lane] + direction
-		if Board.tile(_active_lane, cell, _layouts) != "#":
+		if _runner_can_enter(_active_lane, cell):
 			cells.append(cell)
 	return cells
 
 
+func needs_partner_help_at_exit() -> bool:
+	return not _can_escape(_active_lane) and _runners[_active_lane].distance_squared_to(_exits[_active_lane]) == 1
+
+
+func _can_escape(lane: int) -> bool:
+	return _locked_gates[1 - lane].is_empty()
+
+
+func _runner_can_enter(lane: int, cell: Vector2i) -> bool:
+	return Board.tile(lane, cell, _layouts) != "#" and not _locked_gates[lane].has(cell) and (cell != _exits[lane] or _can_escape(lane))
+
+
 func should_end_turn() -> bool:
 	return _phase == Phase.MOVE and (_turns_left == 0 or _escaped[_active_lane] or _captured[_active_lane])
+
+
+func can_end_turn() -> bool:
+	return _phase == Phase.MOVE and (_active_lane == 0 or should_end_turn())
 
 
 func step_runner(cell: Vector2i) -> bool:
@@ -126,7 +155,7 @@ func step_runner(cell: Vector2i) -> bool:
 
 
 func end_turn() -> bool:
-	if _phase != Phase.MOVE:
+	if not can_end_turn():
 		return false
 	if _active_lane == 0:
 		_active_lane = 1
@@ -159,8 +188,24 @@ func resolve_duel_24(won: bool, fast_bonus: bool = false, player_expr: String = 
 
 
 func _set_runner(lane: int, cell: Vector2i) -> void:
+	var previous := _runners[lane]
+	if previous != cell:
+		_safe_spots[lane].erase(previous)
 	_runners[lane] = cell
-	_escaped[lane] = Board.tile(lane, cell, _layouts) == EXIT
+	var marker := Board.tile(lane, cell, _layouts)
+	_escaped[lane] = marker == EXIT and _can_escape(lane)
+	var plate_index: int = Board.PLATE_MARKERS.find(marker)
+	if plate_index >= 0 and not _active_plates[lane].has(cell):
+		_active_plates[lane][cell] = true
+		var other_gates := _locked_gates[1 - lane]
+		var gate_marker: String = Board.GATE_MARKERS[plate_index]
+		for gate_cell: Vector2i in other_gates.keys():
+			if other_gates[gate_cell] == gate_marker:
+				other_gates.erase(gate_cell)
+
+
+func _blocked_for_snatcher(lane: int) -> Dictionary:
+	return _locked_gates[lane].merged(_safe_spots[lane])
 
 
 func _move_snatcher(lane: int, steps: int) -> void:
@@ -178,13 +223,13 @@ func _move_snatcher(lane: int, steps: int) -> void:
 	var target := _runners[lane]
 	var start := _snatchers[lane]
 	if steps > 0 and start != target:
-		var path := Board.shortest_path(lane, start, target, _layouts, SAFE)
+		var path := Board.shortest_path(lane, start, target, _layouts, "", _blocked_for_snatcher(lane))
 		if path.is_empty():
 			# When a Safe Spot cuts off the target, approach only as far as its near edge.
-			path = Board.shortest_path(lane, start, target, _layouts)
+			path = Board.shortest_path(lane, start, target, _layouts, "", _locked_gates[lane])
 		for index in range(mini(steps, path.size())):
 			var cell := path[index]
-			if Board.tile(lane, cell, _layouts) == SAFE:
+			if _safe_spots[lane].has(cell):
 				break
 			walked.append(cell)
 			_snatchers[lane] = cell
@@ -305,13 +350,16 @@ func _finish_duel_24(won: bool, fast_bonus: bool, player_expr: String) -> void:
 
 func _move_toward_exit(lane: int, steps: int) -> Array[Vector2i]:
 	var walked: Array[Vector2i] = []
-	var exit_cell := Board.find_tile(lane, EXIT, _layouts)
-	var path := Board.shortest_path(lane, _runners[lane], exit_cell, _layouts)
-	if steps > 0 and not path.is_empty():
-		var count := mini(steps, path.size())
-		for i in range(count):
-			walked.append(path[i])
-		_set_runner(lane, path[count - 1])
+	var exit_cell := _exits[lane]
+	var path := Board.shortest_path(lane, _runners[lane], exit_cell, _layouts, "", _locked_gates[lane])
+	if path.is_empty():
+		path = Board.shortest_path(lane, _runners[lane], exit_cell, _layouts)
+	for index in range(mini(steps, path.size())):
+		var cell := path[index]
+		if not _runner_can_enter(lane, cell):
+			break
+		_set_runner(lane, cell)
+		walked.append(cell)
 	return walked
 
 
@@ -322,15 +370,13 @@ func _drag_toward_lair(lane: int) -> Dictionary:
 		_snatchers[lane] = spawn
 		return {"path": walked, "reached_lair": true}
 
-	var path := Board.shortest_path(lane, _runners[lane], spawn, _layouts, SAFE)
-	if path.is_empty():
-		path = Board.shortest_path(lane, _runners[lane], spawn, _layouts)
+	var path := Board.shortest_path(lane, _runners[lane], spawn, _layouts, "", _blocked_for_snatcher(lane))
 	var steps := mini(maxi(_dice.x, _dice.y), path.size())
 	if steps > 0:
 		for i in range(steps):
 			walked.append(path[i])
 		var dest := path[steps - 1]
-		_set_runner(lane, dest)
+		_runners[lane] = dest
 		_snatchers[lane] = dest
 	return {
 		"path": walked,

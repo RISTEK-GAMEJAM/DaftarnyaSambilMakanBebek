@@ -21,6 +21,7 @@ var _game: TwinLabyrinth
 var _boards: Array[PovBoard] = []
 var _shown_lane := 0
 var _busy := false
+var _pending_snatcher_paths: Array = [[], []]
 var _camera: Camera2D
 var _interface: CanvasLayer
 var _cover: ColorRect
@@ -38,6 +39,8 @@ var _stage_button: Button
 var _preview_button: Button
 var _roll_button: Button
 var _end_button: Button
+var _b_moves_label: Label
+var _exit_hint: Label
 var _dice: Array[PixelDie] = []
 var _result: Panel
 var _result_title: Label
@@ -50,7 +53,9 @@ var _result_next: Button
 func _ready() -> void:
 	_stage = GameSettings.selected_stage
 	var data: Dictionary = Catalog.STAGES[_stage]
-	var layouts := Catalog.layouts_for(_stage)
+	var run_seed := GameSettings.pending_run_seed
+	GameSettings.pending_run_seed = -1
+	var layouts := Catalog.layouts_for(_stage, randi() if run_seed < 0 else run_seed)
 	_game = TwinLabyrinth.new(layouts, data["chase"])
 	var background := CanvasLayer.new()
 	background.layer = -1
@@ -138,6 +143,11 @@ func _build_hud() -> void:
 	_end_button = UI.button(bottom, "", _end_turn, PixelButton.Variant.GOLD, 27)
 	for button in [_roll_button, _end_button]:
 		UI.place(button, Rect2(1199, 35, 209, 51))
+	_b_moves_label = UI.label(bottom, "", 24, UI.B)
+	_b_moves_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	UI.place(_b_moves_label, Rect2(725, 35, 683, 51))
+	_exit_hint = UI.label(bottom, "", 24, UI.GOLD)
+	UI.place(_exit_hint, Rect2(200, 35, 750, 51))
 
 
 func _refresh(_code: String = "") -> void:
@@ -160,9 +170,13 @@ func _refresh(_code: String = "") -> void:
 	_roll_button.visible = phase == TwinLabyrinth.Phase.ROLL
 	_roll_button.disabled = _busy
 	_roll_button.text = Lang.t("btn_roll")
-	_end_button.visible = phase == TwinLabyrinth.Phase.MOVE
+	_end_button.visible = phase == TwinLabyrinth.Phase.MOVE and lane == 0
 	_end_button.disabled = _busy or preview or _game.should_end_turn()
 	_end_button.text = Lang.t("end_turn")
+	_b_moves_label.visible = phase == TwinLabyrinth.Phase.MOVE and lane == 1 and not _game.should_end_turn()
+	_b_moves_label.text = Lang.t("spend_b_moves")
+	_exit_hint.visible = phase == TwinLabyrinth.Phase.MOVE and not preview and _game.needs_partner_help_at_exit()
+	_exit_hint.text = Lang.t("exit_help_partner")
 	_options_button.disabled = _busy
 	_stage_button.disabled = _busy
 	var steps: Array[Vector2i] = []
@@ -224,8 +238,15 @@ func _preview_other() -> void:
 
 
 func _show_lane(lane: int) -> void:
-	if lane == _shown_lane:
-		return
+	if lane != _shown_lane:
+		await _transition_to_lane(lane)
+	var gate_animation := _boards[lane].update_landmarks(_game.get_state())
+	if gate_animation:
+		await gate_animation.finished
+	await _play_chase(lane)
+
+
+func _transition_to_lane(lane: int) -> void:
 	_boards[_shown_lane].show_steps([])
 	var out := create_tween()
 	out.tween_property(_cover, "modulate:a", 1.0, 0.20).set_trans(Tween.TRANS_SINE)
@@ -275,6 +296,7 @@ func _step(cell: Vector2i) -> void:
 	_refresh()
 	GameSettings.play_sound("step")
 	await _move_elf(lane, cell)
+	_boards[lane].update_landmarks(_game.get_state())
 	await _settle_phase()
 
 
@@ -284,7 +306,7 @@ func _move_elf(lane: int, cell: Vector2i) -> void:
 
 
 func _end_turn() -> void:
-	if _input_blocked() or _shown_lane != _game.get_state()["active_lane"]:
+	if _input_blocked() or _shown_lane != _game.get_state()["active_lane"] or not _game.can_end_turn():
 		return
 	_busy = true
 	_refresh()
@@ -299,14 +321,15 @@ func _advance_turn() -> void:
 	if lane == 0:
 		await _show_lane(1)
 		return
-	var state := _game.get_state()
-	for character in range(2):
-		var path: Array = state["last_snatcher_paths"][character]
-		if character == _shown_lane:
-			for cell: Vector2i in path:
-				await _boards[character].move_snatcher(cell)
-		elif not path.is_empty():
-			_boards[character].sync_snatcher(path.back())
+	_pending_snatcher_paths = _game.get_state()["last_snatcher_paths"]
+	await _play_chase(_shown_lane)
+
+
+func _play_chase(lane: int) -> void:
+	var path: Array = _pending_snatcher_paths[lane]
+	_pending_snatcher_paths[lane] = []
+	for cell: Vector2i in path:
+		await _boards[lane].move_snatcher(cell)
 
 
 func _settle_phase() -> void:
@@ -355,6 +378,7 @@ func _resolve_duel(won: bool, fast_bonus: bool, expression: String) -> void:
 		await board.free_elf(before["runners"][lane])
 		for cell: Vector2i in result["runner_path"]:
 			await _move_elf(lane, cell)
+		board.update_landmarks(state)
 	else:
 		for cell: Vector2i in result["snatcher_path"]:
 			_focus_runner(lane, cell, PovBoard.SNATCHER_STEP_SECONDS)

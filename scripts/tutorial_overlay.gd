@@ -4,9 +4,13 @@ signal closed
 
 const FONT_TITLE: FontFile = preload("res://assets/fonts/Silkscreen-Bold.ttf")
 const FONT_BODY: FontFile = preload("res://assets/fonts/VT323-Regular.ttf")
+const UI = preload("res://scripts/maze_ui.gd")
+const CrossGate = preload("res://scripts/cross_gate.gd")
+const PressurePlate = preload("res://scripts/pressure_plate.gd")
 const TEX_EXIT: Texture2D = preload("res://assets/sprites/tiles/landmarks/exit_gate.png")
 const TEX_SAFE: Texture2D = preload("res://assets/sprites/tiles/landmarks/safe_bridge.png")
 const TEX_LAIR: Texture2D = preload("res://assets/sprites/tiles/landmarks/snatcher_lair.png")
+const ICON_SIZE := Vector2(44, 40)
 
 var _btn_close: Button
 var _bound_labels: Array[Dictionary] = []
@@ -75,8 +79,8 @@ func _build_ui() -> void:
 	add_child(dim)
 
 	var modal := Panel.new()
-	modal.position = Vector2(160.0, 92.0)
-	modal.size = Vector2(1120.0, 716.0)
+	modal.position = Vector2(160.0, 64.0)
+	modal.size = Vector2(1120.0, 772.0)
 	modal.add_theme_stylebox_override(
 		"panel",
 		_make_pixel_box(Color(0.09, 0.125, 0.13, 0.98), Color(0.46, 0.56, 0.52, 1.0), 4, 8)
@@ -107,7 +111,7 @@ func _build_ui() -> void:
 	grid.add_child(_create_text_card("tut_c4_title", Color(0.67, 0.89, 0.64, 1.0), "tut_c4_body"))
 
 	_btn_close = PixelButton.new()
-	_btn_close.position = Vector2(390.0, 636.0)
+	_btn_close.position = Vector2(390.0, 698.0)
 	_btn_close.size = Vector2(340.0, 54.0)
 	(_btn_close as PixelButton).configure(PixelButton.Variant.EMERALD, 30, 3.0, true)
 	_btn_close.pressed.connect(_close_self)
@@ -150,7 +154,7 @@ func _create_landmarks_card() -> PanelContainer:
 		_make_pixel_box(Color(0.125, 0.168, 0.17, 1.0), Color(0.28, 0.36, 0.35, 1.0), 2, 0)
 	)
 	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 8)
+	vb.add_theme_constant_override("separation", 5)
 	card.add_child(vb)
 
 	var h := Label.new()
@@ -160,28 +164,41 @@ func _create_landmarks_card() -> PanelContainer:
 	vb.add_child(h)
 	_bind_label(h, "tut_c2_title")
 
-	vb.add_child(_create_landmark_row(TEX_EXIT, Rect2(6.0, 7.0, 19.0, 22.0), "tut_exit_title", "tut_exit_desc"))
-	vb.add_child(_create_landmark_row(TEX_SAFE, Rect2(0.0, 1.0, 32.0, 26.0), "tut_safe_title", "tut_safe_desc"))
-	vb.add_child(_create_landmark_row(TEX_LAIR, Rect2(7.0, 7.0, 19.0, 19.0), "tut_lair_title", "tut_lair_desc"))
+	var gate := CrossGate.new()
+	gate.setup("1", UI.A)
+	var plate := PressurePlate.new()
+	plate.setup("1", UI.A)
+	vb.add_child(_create_landmark_row(_drawn_icon(gate), "tut_gate_title", "tut_gate_desc"))
+	vb.add_child(_create_landmark_row(_texture_icon(TEX_EXIT), "tut_exit_title", "tut_exit_desc"))
+	vb.add_child(_create_landmark_row(_texture_icon(TEX_SAFE), "tut_safe_title", "tut_safe_desc"))
+	vb.add_child(_create_landmark_row(_texture_icon(TEX_LAIR), "tut_lair_title", "tut_lair_desc"))
+	vb.add_child(_create_landmark_row(_drawn_icon(plate), "tut_plate_title", "tut_plate_desc"))
 	return card
 
 
-func _create_landmark_row(tex: Texture2D, crop_region: Rect2, title_key: String, desc_key: String) -> HBoxContainer:
+func _drawn_icon(art: Node2D) -> Control:
+	var icon := Control.new()
+	art.scale = Vector2.ONE * 1.25
+	art.position.x = 2.0
+	icon.add_child(art)
+	return icon
+
+
+func _texture_icon(texture: Texture2D) -> TextureRect:
+	var icon := TextureRect.new()
+	icon.texture = texture
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	return icon
+
+
+func _create_landmark_row(icon: Control, title_key: String, desc_key: String) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
-
-	var atlas := AtlasTexture.new()
-	atlas.atlas = tex
-	atlas.region = crop_region
-
-	var tr := TextureRect.new()
-	tr.texture = atlas
-	tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	tr.custom_minimum_size = Vector2(54.0, 54.0)
-	tr.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(tr)
+	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	icon.custom_minimum_size = ICON_SIZE
+	icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(icon)
 
 	var txt_col := VBoxContainer.new()
 	txt_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL

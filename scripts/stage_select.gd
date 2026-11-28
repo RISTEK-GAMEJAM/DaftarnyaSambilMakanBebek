@@ -5,6 +5,8 @@ const Catalog = preload("res://scripts/stage_catalog.gd")
 const Preview = preload("res://scripts/stage_preview.gd")
 
 var _selected: int
+var _run_seed: int
+var _layouts: Array
 var _preview_lane := 0
 var _rows: Array[PixelButton] = []
 var _header: Label
@@ -16,11 +18,13 @@ var _dimensions: Label
 var _difficulty: Label
 var _begin: Button
 var _preview: Preview
+var _preview_note: Label
 var _preview_buttons: Array[PixelButton] = []
 
 
 func _ready() -> void:
 	_selected = GameSettings.selected_stage
+	_prepare_preview()
 	UI.box(self, Rect2(Vector2.ZERO, UI.SCREEN), UI.ABYSS)
 	_back = UI.button(self, "", func() -> void: get_tree().change_scene_to_file(Catalog.MENU_SCENE))
 	_language = UI.button(self, "", Lang.toggle)
@@ -46,6 +50,9 @@ func _ready() -> void:
 	var preview_box := UI.box(detail, Rect2(32, 158, 880, 438), UI.ABYSS, UI.LINE)
 	_preview = Preview.new()
 	preview_box.add_child(_preview)
+	_preview_note = UI.label(preview_box, "", 22, UI.MUTED)
+	_preview_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	UI.place(_preview_note, Rect2(365, 16, 495, 40))
 	for lane in range(2):
 		var button := UI.button(preview_box, "", _set_preview.bind(lane), PixelButton.Variant.SLATE, 24)
 		UI.place(button, Rect2(18 + lane * 139, 16, 130, 40))
@@ -62,9 +69,17 @@ func _ready() -> void:
 
 
 func _select(index: int) -> void:
+	if index == _selected:
+		return
 	_selected = index
 	_preview_lane = 0
+	_prepare_preview()
 	_refresh()
+
+
+func _prepare_preview() -> void:
+	_run_seed = randi()
+	_layouts = Catalog.layouts_for(_selected, _run_seed)
 
 
 func _set_preview(lane: int) -> void:
@@ -80,22 +95,33 @@ func _refresh(_code: String = "") -> void:
 	_name.text = Catalog.title(_selected)
 	_description.text = Lang.t("stage_description_%d" % _selected)
 	_begin.text = Lang.t("stage_begin")
+	_preview_note.text = Lang.t("stage_preview_hidden_exit")
 	for index in range(_rows.size()):
 		_rows[index].text = Catalog.title(index)
 		_rows[index].variant = PixelButton.Variant.GOLD if index == _selected else PixelButton.Variant.SLATE
 	for lane in range(2):
 		_preview_buttons[lane].text = Lang.t("lane_a" if lane == 0 else "lane_b")
 		_preview_buttons[lane].variant = PixelButton.Variant.EMERALD if lane == _preview_lane else PixelButton.Variant.SLATE
-	var layouts := Catalog.layouts_for(_selected)
-	var rows: Array = layouts[_preview_lane]
+	var rows := _full_preview()
 	var width := 0
-	for row: String in rows:
+	for row in rows:
 		width = maxi(width, row.length())
 	_dimensions.text = Lang.t("stage_dimensions", [width, rows.size()])
 	_difficulty.text = Lang.t("stage_difficulty", [_selected, Catalog.STAGES.size() - 1]) if _selected > 0 else Lang.t("stage_training")
 	_preview.setup(rows, Rect2(14, 62, 852, 356), UI.A if _preview_lane == 0 else UI.B)
 
 
+func _full_preview() -> Array[String]:
+	var rows: Array[String] = []
+	for row: String in _layouts[_preview_lane]:
+		var silhouette := ""
+		for marker in row:
+			silhouette += "#" if marker == "#" else "."
+		rows.append(silhouette)
+	return rows
+
+
 func _begin_stage() -> void:
 	GameSettings.selected_stage = _selected
+	GameSettings.pending_run_seed = _run_seed
 	get_tree().change_scene_to_file(Catalog.GAME_SCENE)

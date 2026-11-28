@@ -2,6 +2,8 @@ extends Node2D
 
 const Board = preload("res://scripts/labyrinth.gd")
 const UI = preload("res://scripts/maze_ui.gd")
+const CrossGate = preload("res://scripts/cross_gate.gd")
+const PressurePlate = preload("res://scripts/pressure_plate.gd")
 const ELF_SCENES := [
 	preload("res://scenes/characters/elf_boy.tscn"),
 	preload("res://scenes/characters/elf_girl.tscn"),
@@ -10,7 +12,7 @@ const SNATCHER_SCENE := preload("res://scenes/characters/snatcher.tscn")
 const FLOOR := preload("res://assets/sprites/tiles/lantai/lantai.tres")
 const SAFE := preload("res://assets/sprites/tiles/landmarks/safe_spot.png")
 const BRIDGE := preload("res://assets/sprites/tiles/landmarks/safe_bridge.png")
-const EXIT := preload("res://assets/sprites/tiles/landmarks/exit_gate.png")
+const EXIT_PORTAL := preload("res://assets/sprites/tiles/landmarks/exit_gate.png")
 const LAIR := preload("res://assets/sprites/tiles/landmarks/snatcher_lair.png")
 const TILE := 32.0
 const ELF_STEP_SECONDS := 0.16
@@ -32,6 +34,10 @@ var _floor_cells: Array[Vector2i] = []
 var _discovered: Dictionary = {}
 var _valid_steps: Array[Vector2i] = []
 var _fog: Node2D
+var _floor: TileMapLayer
+var _plates: Dictionary = {}
+var _gates: Dictionary = {}
+var _safe_landmarks: Dictionary = {}
 
 
 func setup(lane: int, layouts: Array, sight: int) -> void:
@@ -45,9 +51,9 @@ func setup(lane: int, layouts: Array, sight: int) -> void:
 	map_size = Vector2i(width, rows.size())
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
-	var floor_layer := TileMapLayer.new()
-	floor_layer.tile_set = FLOOR
-	add_child(floor_layer)
+	_floor = TileMapLayer.new()
+	_floor.tile_set = FLOOR
+	add_child(_floor)
 	for y in range(map_size.y):
 		for x in range(map_size.x):
 			var cell := Vector2i(x, y)
@@ -55,21 +61,31 @@ func setup(lane: int, layouts: Array, sight: int) -> void:
 			if marker == "#":
 				continue
 			_floor_cells.append(cell)
-			var mask := 0
-			for direction in range(MASK_DIRECTIONS.size()):
-				if Board.tile(lane, cell + MASK_DIRECTIONS[direction], layouts) != "#":
-					mask |= 1 << direction
+			var mask := _floor_mask(cell)
 			if marker == "o" and mask in [5, 10]:
 				var bridge := _landmark(BRIDGE, cell, Vector2.ZERO, 1.0)
 				bridge.rotation = PI / 2.0 if mask == 5 else 0.0
+				_safe_landmarks[cell] = bridge
 			else:
-				floor_layer.set_cell(cell, 0, LabyrinthGenerator.MASK_TO_ATLAS[mask])
+				_floor.set_cell(cell, 0, LabyrinthGenerator.MASK_TO_ATLAS[mask])
 				if marker == "o":
-					_landmark(SAFE, cell, Vector2(0, -3), 0.72)
+					_safe_landmarks[cell] = _landmark(SAFE, cell, Vector2(0, -3), 0.72)
 			if marker == "E":
-				_landmark(EXIT, cell, Vector2(0, -4), 0.85)
+				_landmark(EXIT_PORTAL, cell, Vector2(0, -4), 0.85)
 			elif marker == "H":
 				_landmark(LAIR, cell, Vector2(0, -3), 0.85)
+			elif marker in Board.GATE_MARKERS:
+				var gate := CrossGate.new()
+				gate.position = Vector2(cell) * TILE
+				gate.setup(marker, UI.A if lane == 0 else UI.B)
+				add_child(gate)
+				_gates[cell] = gate
+			elif marker in Board.PLATE_MARKERS:
+				var plate := PressurePlate.new()
+				plate.position = Vector2(cell) * TILE
+				plate.setup(str(Board.PLATE_MARKERS.find(marker) + 1), UI.B if lane == 0 else UI.A)
+				add_child(plate)
+				_plates[cell] = plate
 
 	_fog = Node2D.new()
 	_fog.z_index = 2
@@ -89,6 +105,35 @@ func setup(lane: int, layouts: Array, sight: int) -> void:
 	snatcher.position = center(_snatcher_cell) + SNATCHER_OFFSET
 	add_child(snatcher)
 	discover(start, true)
+
+
+func _floor_mask(cell: Vector2i) -> int:
+	var mask := 0
+	for index in range(MASK_DIRECTIONS.size()):
+		if Board.tile(_lane, cell + MASK_DIRECTIONS[index], _layouts) != "#":
+			mask |= 1 << index
+	return mask
+
+
+func update_landmarks(state: Dictionary) -> Tween:
+	var locked: Dictionary = state["locked_gates"][_lane]
+	var gate_animation: Tween
+	for cell: Vector2i in _gates:
+		var started: Tween = _gates[cell].set_open(not locked.has(cell))
+		if started:
+			gate_animation = started
+
+	var safe: Dictionary = state["safe_spots"][_lane]
+	for cell: Vector2i in _safe_landmarks.keys():
+		if not safe.has(cell):
+			_safe_landmarks[cell].queue_free()
+			_safe_landmarks.erase(cell)
+			_floor.set_cell(cell, 0, LabyrinthGenerator.MASK_TO_ATLAS[_floor_mask(cell)])
+
+	var active_plates: Dictionary = state["active_plates"][_lane]
+	for cell: Vector2i in _plates:
+		_plates[cell].pressed = active_plates.has(cell)
+	return gate_animation
 
 
 func _landmark(texture: Texture2D, cell: Vector2i, offset: Vector2, magnification: float) -> Sprite2D:
@@ -164,12 +209,6 @@ func move_snatcher(cell: Vector2i, carrying: bool = false) -> void:
 		discover(cell)
 	snatcher.visible = from_discovered or _discovered.has(cell)
 	await _slide(snatcher, target, SNATCHER_STEP_SECONDS)
-	_update_snatcher_visibility()
-
-
-func sync_snatcher(cell: Vector2i) -> void:
-	_snatcher_cell = cell
-	snatcher.call("teleport_to_local", center(cell) + SNATCHER_OFFSET)
 	_update_snatcher_visibility()
 
 

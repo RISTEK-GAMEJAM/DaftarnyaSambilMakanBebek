@@ -26,6 +26,8 @@ const LAYOUTS := [
 	],
 ]
 const DIRECTIONS := [Vector2i.RIGHT, Vector2i.DOWN, Vector2i.LEFT, Vector2i.UP]
+const GATE_MARKERS := ["1", "2"]
+const PLATE_MARKERS := ["a", "b"]
 
 
 static func build_layout_from_labyrinth(labirin: Node2D) -> Array[String]:
@@ -99,7 +101,7 @@ static func find_all_tiles(lane: int, marker: String, layouts: Array = LAYOUTS) 
 
 
 # Return the steps after start, including destination. Adjacent tiles use four directions.
-static func shortest_path(lane: int, start: Vector2i, destination: Vector2i, layouts: Array = LAYOUTS, blocked_marker: String = "") -> Array[Vector2i]:
+static func shortest_path(lane: int, start: Vector2i, destination: Vector2i, layouts: Array = LAYOUTS, blocked_marker: String = "", blocked_cells: Dictionary = {}) -> Array[Vector2i]:
 	var path: Array[Vector2i] = []
 	var frontier: Array[Vector2i] = [start]
 	var previous := {start: start}
@@ -116,7 +118,7 @@ static func shortest_path(lane: int, start: Vector2i, destination: Vector2i, lay
 		for direction in DIRECTIONS:
 			var neighbor: Vector2i = cell + direction
 			var marker := tile(lane, neighbor, layouts)
-			if marker != "#" and marker != blocked_marker and not previous.has(neighbor):
+			if marker != "#" and marker != blocked_marker and not blocked_cells.has(neighbor) and not previous.has(neighbor):
 				previous[neighbor] = cell
 				frontier.append(neighbor)
 	return path

@@ -18,6 +18,7 @@ const SOUNDS := {
 var volumes := [1.0, 0.8, 0.75]
 var muted := false
 var selected_stage := 0
+var pending_run_seed := -1
 var _sfx: AudioStreamPlayer
 var _clips: Dictionary = {}
 

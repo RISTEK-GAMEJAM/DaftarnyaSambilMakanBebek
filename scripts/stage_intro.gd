@@ -1,7 +1,7 @@
 extends Control
 
 const UI = preload("res://scripts/maze_ui.gd")
-const SPEAKERS := ["A", "B", "A", "B"]
+const SPEAKERS := ["A", "B", "A", "B", "B"]
 
 var _page := 0
 var _title: Label
@@ -13,8 +13,7 @@ var _next: Button
 
 
 func _ready() -> void:
-	# Azkal's 4-page Tutorial Dialogue placed in Hanif's bottom RPG dialogue box location
-	# so the player can clearly see the labyrinth & Elf above while reading!
+	# Bottom dialogue box keeps the labyrinth and Elf visible above it.
 	z_index = 50
 	position = Vector2.ZERO
 	size = UI.SCREEN
