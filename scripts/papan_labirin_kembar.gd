@@ -42,12 +42,12 @@ var _end_button: Button
 var _b_moves_label: Label
 var _exit_hint: Label
 var _dice: Array[PixelDie] = []
-var _result: Panel
+var _result: Control
 var _result_title: Label
 var _result_detail: Label
-var _result_retry: Button
-var _result_stages: Button
-var _result_next: Button
+var _result_quote: Label
+var _result_retry: PixelButton
+var _result_stages: PixelButton
 
 
 func _ready() -> void:
@@ -192,7 +192,7 @@ func _letter(lane: int) -> String:
 
 
 func _input_blocked() -> bool:
-	return _busy or _options.visible or _duel.visible or (is_instance_valid(_intro) and _intro.visible) or (is_instance_valid(_jumpscare) and _jumpscare.visible) or _result.get_parent().visible
+	return _busy or _options.visible or _duel.visible or (is_instance_valid(_intro) and _intro.visible) or (is_instance_valid(_jumpscare) and _jumpscare.visible) or _result.visible
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -349,7 +349,11 @@ func _settle_phase() -> void:
 			_duel.open_duel(duel)
 		TwinLabyrinth.Phase.WON, TwinLabyrinth.Phase.LOST:
 			var won: bool = state["phase"] == TwinLabyrinth.Phase.WON
-			_result.get_parent().show()
+			_localize_result(state)
+			_result.modulate.a = 0.0
+			_result.show()
+			var fade := create_tween()
+			fade.tween_property(_result, "modulate:a", 1.0, 0.35).set_trans(Tween.TRANS_SINE)
 			GameSettings.play_sound("victory" if won else "defeat")
 		TwinLabyrinth.Phase.ROLL:
 			# If A already escaped, the next roll stays with B. A's turn is skipped after the roll.
@@ -396,39 +400,58 @@ func _open_stages() -> void:
 
 
 func _build_result() -> void:
-	var layer := Control.new()
-	layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.z_index = 70
-	_interface.add_child(layer)
-	_result = UI.modal(layer, Rect2(367, 290, 706, 320))
-	_result.get_parent().hide()
-	_result_title = UI.label(_result, "", 36, UI.GOLD, true)
+	_result = Control.new()
+	_result.position = Vector2.ZERO
+	_result.size = UI.SCREEN
+	_result.mouse_filter = Control.MOUSE_FILTER_STOP
+	_result.z_index = 70
+	_result.hide()
+	_interface.add_child(_result)
+
+	var shade := ColorRect.new()
+	shade.position = Vector2.ZERO
+	shade.size = UI.SCREEN
+	shade.color = Color(0.015, 0.018, 0.030, 0.88)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	_result.add_child(shade)
+
+	var band := ColorRect.new()
+	band.position = Vector2(0, 214)
+	band.size = Vector2(UI.SCREEN.x, 356)
+	band.color = Color(0.0, 0.0, 0.0, 0.38)
+	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_result.add_child(band)
+
+	_result_title = UI.label(_result, "", 62, Color("#FFE14D"), true)
 	_result_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UI.place(_result_title, Rect2(32, 30, 642, 65))
-	_result_detail = UI.label(_result, "", 28)
+	_result_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_result_title.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.90))
+	_result_title.add_theme_constant_override("shadow_offset_x", 0)
+	_result_title.add_theme_constant_override("shadow_offset_y", 6)
+	UI.place(_result_title, Rect2(40, 240, 1360, 102))
+
+	_result_detail = UI.label(_result, "", 28, UI.INK)
 	_result_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_result_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	UI.place(_result_detail, Rect2(55, 117, 596, 74))
-	_result_stages = UI.button(_result, "", _open_stages)
-	_result_retry = UI.button(_result, "", get_tree().reload_current_scene)
-	_result_next = UI.button(_result, "", _next_stage, PixelButton.Variant.GOLD)
-	UI.place(_result_next, Rect2(471, 224, 204, 57))
+	UI.place(_result_detail, Rect2(140, 360, 1160, 40))
+
+	_result_quote = UI.label(_result, "", 28, Color("#FF8F96"))
+	_result_quote.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_result_quote.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	UI.place(_result_quote, Rect2(160, 424, 1120, 96))
+
+	_result_stages = UI.button(_result, "", _open_stages, PixelButton.Variant.SLATE, 26)
+	_result_retry = UI.button(_result, "", get_tree().reload_current_scene, PixelButton.Variant.BRIGHT_GOLD, 26)
+	UI.place(_result_stages, Rect2(482, 586, 224, 58))
+	UI.place(_result_retry, Rect2(734, 586, 224, 58))
 
 
 func _localize_result(state: Dictionary) -> void:
 	var won: bool = state["phase"] == TwinLabyrinth.Phase.WON
 	_result_title.text = Lang.t("victory" if won else "game_over")
-	_result_title.add_theme_color_override("font_color", UI.GOLD if won else UI.DANGER)
+	_result_title.add_theme_color_override("font_color", Color("#FFE14D") if won else Color("#D92332"))
 	_result_detail.text = Lang.t("victory_detail") if won else Lang.t("defeat_detail", [_letter(state["lost_lane"])])
+	_result_quote.text = "%s\n- Snatcher" % Lang.t("snatcher_quote_win" if won else "snatcher_quote_lose")
 	_result_stages.text = Lang.t("select_stage")
 	_result_retry.text = Lang.t("btn_play_again")
-	_result_next.text = Lang.t("next_stage")
-	_result_next.visible = won and _stage + 1 < Catalog.STAGES.size()
-	var offset := 0 if _result_next.visible else 110
-	UI.place(_result_stages, Rect2(31 + offset, 224, 204, 57))
-	UI.place(_result_retry, Rect2(251 + offset, 224, 204, 57))
-
-
-func _next_stage() -> void:
-	GameSettings.selected_stage = _stage + 1
-	get_tree().reload_current_scene()
+	_result_retry.variant = PixelButton.Variant.BRIGHT_GOLD if won else PixelButton.Variant.CRIMSON
