@@ -31,9 +31,7 @@ var _jumpscare: Jumpscare
 var _stage_label: Label
 var _pov_label: Label
 var _turns_left: TurnsLeft
-var _team_label: Label
 var _dice_label: Label
-var _hint: Label
 var _language_button: Button
 var _options_button: Button
 var _stage_button: Button
@@ -134,11 +132,6 @@ func _build_hud() -> void:
 	var plus := UI.label(bottom, "+", 22, UI.MUTED)
 	UI.place(plus, Rect2(88, 55, 17, 24))
 
-	UI.box(bottom, Rect2(174, 19, 1, 78), UI.LINE)
-	_team_label = UI.label(bottom, "", 21, UI.MUTED)
-	UI.place(_team_label, Rect2(200, 17, 770, 24))
-	_hint = UI.label(bottom, "", 26)
-	UI.place(_hint, Rect2(200, 45, 770, 39))
 	_preview_button = UI.button(bottom, "", _preview_other, PixelButton.Variant.SLATE, 23)
 	UI.place(_preview_button, Rect2(995, 35, 191, 51))
 	_roll_button = UI.button(bottom, "", _roll, PixelButton.Variant.GOLD, 27)
@@ -157,15 +150,6 @@ func _refresh(_code: String = "") -> void:
 	_pov_label.add_theme_color_override("font_color", UI.A if _shown_lane == 0 else UI.B)
 	_turns_left.show_count(state["turns_left"], state["round"], phase == TwinLabyrinth.Phase.ROLL)
 	_dice_label.text = Lang.t("shared_dice")
-	var statuses: Array[String] = []
-	for character in range(2):
-		var key := "elf_ready"
-		if state["escaped"][character]:
-			key = "status_escaped"
-		elif state["captured"][character]:
-			key = "status_captured"
-		statuses.append("%s  %s" % [_letter(character), Lang.t(key)])
-	_team_label.text = "    /    ".join(statuses)
 	_language_button.text = Lang.button_label()
 	_language_button.tooltip_text = Lang.t("lang_tooltip")
 	_options_button.text = Lang.t("menu_options")
@@ -181,16 +165,6 @@ func _refresh(_code: String = "") -> void:
 	_end_button.text = Lang.t("end_turn")
 	_options_button.disabled = _busy
 	_stage_button.disabled = _busy
-	if phase == TwinLabyrinth.Phase.DUEL:
-		_hint.text = Lang.t("duel_board_hint")
-	elif preview:
-		_hint.text = Lang.t("preview_hint", [_letter(lane)])
-	elif phase == TwinLabyrinth.Phase.ROLL:
-		_hint.text = Lang.t("roll_hint")
-	elif phase == TwinLabyrinth.Phase.MOVE and not _game.should_end_turn():
-		_hint.text = Lang.t("move_hint", [_letter(lane)])
-	else:
-		_hint.text = ""
 	var steps: Array[Vector2i] = []
 	if not _busy and not preview:
 		steps = _game.available_steps()
