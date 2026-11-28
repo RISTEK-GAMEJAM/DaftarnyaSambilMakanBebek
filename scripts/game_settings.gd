@@ -22,6 +22,7 @@ var pending_run_seed := -1
 var _sfx: AudioStreamPlayer
 var _music: AudioStreamPlayer
 var _clips: Dictionary = {}
+var _web_music_pending := false
 
 
 func _ready() -> void:
@@ -40,6 +41,7 @@ func _ready() -> void:
 
 	_sfx = AudioStreamPlayer.new()
 	_sfx.bus = &"SFX"
+	_sfx.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	add_child(_sfx)
 	for mpath in MUSIC_PATHS:
 		if ResourceLoader.exists(mpath):
@@ -51,10 +53,26 @@ func _ready() -> void:
 			_music = AudioStreamPlayer.new()
 			_music.stream = stream
 			_music.bus = &"Music"
+			_music.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 			add_child(_music)
 			_music.finished.connect(_music.play)
-			_music.play()
+			if OS.has_feature("web"):
+				# Browsers block Web Audio until the first click/keypress.
+				_web_music_pending = true
+			else:
+				_music.play()
 			break
+	set_process_input(_web_music_pending)
+
+
+func _input(event: InputEvent) -> void:
+	if not _web_music_pending:
+		return
+	if (event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed) or (event is InputEventScreenTouch and event.pressed):
+		_web_music_pending = false
+		set_process_input(false)
+		if is_instance_valid(_music) and not _music.playing:
+			_music.play()
 
 
 func _exit_tree() -> void:
