@@ -2,8 +2,11 @@ extends Control
 
 const UI = preload("res://scripts/maze_ui.gd")
 const SPEAKERS := ["A", "B", "A", "B", "B"]
+const CHARS_PER_SECOND := 52.0
 
 var _page := 0
+var _typing := false
+var _type_tween: Tween
 var _title: Label
 var _speaker: Label
 var _body: Label
@@ -45,32 +48,64 @@ func _ready() -> void:
 	UI.place(_previous, Rect2(768, 122, 148, 46))
 	UI.place(_next, Rect2(928, 122, 166, 46))
 
-	Lang.language_changed.connect(_refresh)
-	_refresh()
+	Lang.language_changed.connect(_on_language_changed)
+	_refresh(true)
 
 
-func _refresh(_code: String = "") -> void:
+func _on_language_changed(_code: String = "") -> void:
+	_refresh(_typing)
+
+
+func _refresh(animate: bool = true) -> void:
 	_title.text = Lang.t("stage_tutorial")
 	_speaker.text = Lang.t("intro_speaker", [SPEAKERS[_page]])
-	_speaker.add_theme_color_override("font_color", UI.A if _page % 2 == 0 else UI.B)
+	_speaker.add_theme_color_override("font_color", UI.A if SPEAKERS[_page] == "A" else UI.B)
 	_body.text = Lang.t("intro_%d" % _page)
 	_counter.text = "%d / %d" % [_page + 1, SPEAKERS.size()]
 	_previous.visible = _page > 0
 	_previous.text = Lang.t("action_back")
 	_next.text = Lang.t("stage_begin" if _page == SPEAKERS.size() - 1 else "intro_next")
+	if animate:
+		_start_typing()
+	else:
+		_finish_typing()
+
+
+func _start_typing() -> void:
+	if _type_tween and _type_tween.is_valid():
+		_type_tween.kill()
+	var total := _body.get_total_character_count()
+	if total <= 0:
+		_finish_typing()
+		return
+	_typing = true
+	_next.disabled = true
+	_body.visible_characters = 0
+	var duration := clampf(float(total) / CHARS_PER_SECOND, 0.4, 3.6)
+	_type_tween = create_tween()
+	_type_tween.tween_property(_body, "visible_characters", total, duration)
+	_type_tween.finished.connect(_finish_typing)
+
+
+func _finish_typing() -> void:
+	_typing = false
+	_body.visible_characters = -1
+	_next.disabled = false
 
 
 func _previous_page() -> void:
 	_page -= 1
-	_refresh()
+	_refresh(true)
 
 
 func _next_page() -> void:
+	if _typing:
+		return
 	if _page == SPEAKERS.size() - 1:
 		hide()
 	else:
 		_page += 1
-		_refresh()
+		_refresh(true)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

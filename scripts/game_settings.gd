@@ -20,6 +20,7 @@ var muted := false
 var selected_stage := 0
 var pending_run_seed := -1
 var _sfx: AudioStreamPlayer
+var _music: AudioStreamPlayer
 var _clips: Dictionary = {}
 
 
@@ -42,18 +43,30 @@ func _ready() -> void:
 	add_child(_sfx)
 	for mpath in MUSIC_PATHS:
 		if ResourceLoader.exists(mpath):
-			var music := AudioStreamPlayer.new()
-			music.stream = load(mpath)
-			music.bus = &"Music"
-			add_child(music)
-			music.finished.connect(music.play)
-			music.play()
+			var stream := load(mpath)
+			if stream is AudioStreamMP3:
+				(stream as AudioStreamMP3).loop = true
+			elif stream is AudioStreamOggVorbis:
+				(stream as AudioStreamOggVorbis).loop = true
+			_music = AudioStreamPlayer.new()
+			_music.stream = stream
+			_music.bus = &"Music"
+			add_child(_music)
+			_music.finished.connect(_music.play)
+			_music.play()
 			break
 
 
 func _exit_tree() -> void:
 	if is_instance_valid(_sfx):
 		_sfx.stop()
+	if is_instance_valid(_music):
+		_music.stop()
+
+
+func set_music_paused(paused: bool) -> void:
+	if is_instance_valid(_music):
+		_music.stream_paused = paused
 
 
 func set_volume(index: int, value: float) -> void:

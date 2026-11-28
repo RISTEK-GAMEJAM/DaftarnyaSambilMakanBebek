@@ -89,6 +89,7 @@ func _ready() -> void:
 
 func trigger() -> void:
 	# PHASE 1: Instant blackout + eerie silence + trembling "BEHIND YOU..." text!
+	GameSettings.set_music_paused(true)
 	_behind_lbl.text = Lang.t("snatcher_behind")
 	visible = true
 	modulate.a = 1.0
@@ -136,6 +137,7 @@ func trigger() -> void:
 	_vignette.visible = false
 	_behind_lbl.visible = false
 	modulate.a = 1.0
+	GameSettings.set_music_paused(false)
 
 
 func _process(delta: float) -> void:

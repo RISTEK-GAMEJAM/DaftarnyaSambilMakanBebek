@@ -263,8 +263,8 @@ func _build_credits() -> void:
 
 	var engine := UI.label(_credits, "", 21, UI.MUTED)
 	UI.place(engine, Rect2(38, 454, 728, 26))
-	var engine_detail := UI.label(_credits, "Godot Engine 4.7.2, Aseprite\nSilkscreen & VT323 (Google Fonts, SIL OFL)\nJumpscare SFX: Jump Scare Sound 2 — freesound_community (Pixabay)", 23)
-	UI.place(engine_detail, Rect2(38, 482, 728, 92))
+	var engine_detail := UI.label(_credits, "Godot Engine 4.7.2, Aseprite\nSilkscreen & VT323 (Google Fonts, SIL OFL)\nBGM: Short Mystical Orchestral Loop — NR-Music (Pixabay)\nSFX: Jump Scare Sound 2 — freesound_community (Pixabay)", 21)
+	UI.place(engine_detail, Rect2(38, 480, 728, 108))
 	_credit_labels = [heading, team_label, jam, contributor_label, engine]
 
 	_close_credits = UI.button(_credits, "", func() -> void: _credits.get_parent().hide(), PixelButton.Variant.GOLD, 24)

@@ -27,7 +27,7 @@ func set_open(value: bool) -> Tween:
 	if _animation and _animation.is_valid():
 		_animation.kill()
 	_animation = create_tween()
-	var height := float(BARS.get_height()) if _open else 0.0
+	var height := 25.0 if _open else 0.0
 	_animation.tween_property(self, "_lift", height, 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	return _animation
 
