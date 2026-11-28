@@ -7,6 +7,8 @@ const Options = preload("res://scripts/options_panel.gd")
 const Game24 = preload("res://scripts/game_24_panel.gd")
 const Tutorial = preload("res://scripts/stage_intro.gd")
 const Jumpscare = preload("res://scripts/snatcher_jumpscare.gd")
+const TurnsLeft = preload("res://scripts/turns_left.gd")
+const TURNS_LEFT_SCENE := preload("res://scenes/ui/turns_left.tscn")
 
 const BOARD_AREA := Rect2(0, 104, 1440, 680)
 const BOARD_ZOOM := 2.3
@@ -28,9 +30,7 @@ var _intro: Tutorial
 var _jumpscare: Jumpscare
 var _stage_label: Label
 var _pov_label: Label
-var _round_label: Label
-var _turn_value: Label
-var _turn_caption: Label
+var _turns_left: TurnsLeft
 var _team_label: Label
 var _dice_label: Label
 var _hint: Label
@@ -111,14 +111,9 @@ func _build_hud() -> void:
 	_pov_label = UI.label(top, "", 22, UI.A, true)
 	UI.place(_pov_label, Rect2(32, 46, 398, 34))
 
-	var turns := UI.box(top, Rect2(557, 12, 326, 80), UI.ABYSS, UI.GOLD)
-	_turn_value = UI.label(turns, "—", 53, UI.GOLD)
-	_turn_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UI.place(_turn_value, Rect2(10, 3, 76, 68))
-	_turn_caption = UI.label(turns, "", 17, UI.INK, true)
-	UI.place(_turn_caption, Rect2(98, 14, 216, 23))
-	_round_label = UI.label(turns, "", 23, UI.MUTED)
-	UI.place(_round_label, Rect2(98, 40, 212, 27))
+	_turns_left = TURNS_LEFT_SCENE.instantiate()
+	top.add_child(_turns_left)
+	_turns_left.position = (top.size - _turns_left.size) / 2.0
 
 	_options_button = UI.button(top, "", _open_options, PixelButton.Variant.SLATE, 23)
 	_language_button = UI.button(top, "", Lang.toggle, PixelButton.Variant.SLATE, 23)
@@ -160,9 +155,7 @@ func _refresh(_code: String = "") -> void:
 	_stage_label.text = Catalog.title(_stage)
 	_pov_label.text = Lang.t("pov_character", [_letter(_shown_lane)])
 	_pov_label.add_theme_color_override("font_color", UI.A if _shown_lane == 0 else UI.B)
-	_round_label.text = Lang.t("round_number", [state["round"]])
-	_turn_value.text = "—" if phase == TwinLabyrinth.Phase.ROLL else str(state["turns_left"])
-	_turn_caption.text = Lang.t("turns_left")
+	_turns_left.show_count(state["turns_left"], state["round"], phase == TwinLabyrinth.Phase.ROLL)
 	_dice_label.text = Lang.t("shared_dice")
 	var statuses: Array[String] = []
 	for character in range(2):

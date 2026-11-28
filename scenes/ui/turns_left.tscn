@@ -1,0 +1,60 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/turns_left.gd" id="1_widget"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/turns_left/high.png" id="2_high"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/turns_left/medium.png" id="3_medium"]
+[ext_resource type="Texture2D" path="res://assets/sprites/ui/turns_left/low.png" id="4_low"]
+[ext_resource type="FontFile" path="res://assets/fonts/Silkscreen-Bold.ttf" id="5_title"]
+[ext_resource type="FontFile" path="res://assets/fonts/VT323-Regular.ttf" id="6_body"]
+
+[node name="TurnsLeft" type="TextureRect"]
+texture_filter = 1
+offset_right = 192.0
+offset_bottom = 96.0
+mouse_filter = 2
+texture = ExtResource("3_medium")
+expand_mode = 1
+stretch_mode = 5
+script = ExtResource("1_widget")
+high_texture = ExtResource("2_high")
+medium_texture = ExtResource("3_medium")
+low_texture = ExtResource("4_low")
+
+[node name="Caption" type="Label" parent="."]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 11.0
+offset_right = 182.0
+offset_bottom = 30.0
+theme_override_colors/font_color = Color(0.96, 0.91, 0.83, 1)
+theme_override_fonts/font = ExtResource("5_title")
+theme_override_font_sizes/font_size = 13
+text = "Turn Tersisa"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Value" type="Label" parent="."]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 29.0
+offset_right = 182.0
+offset_bottom = 69.0
+theme_override_colors/font_color = Color(0.96, 0.91, 0.83, 1)
+theme_override_fonts/font = ExtResource("6_body")
+theme_override_font_sizes/font_size = 46
+text = "—"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Round" type="Label" parent="."]
+layout_mode = 0
+offset_left = 36.0
+offset_top = 68.0
+offset_right = 156.0
+offset_bottom = 85.0
+theme_override_colors/font_color = Color(0.78, 0.83, 0.89, 1)
+theme_override_fonts/font = ExtResource("6_body")
+theme_override_font_sizes/font_size = 19
+text = "Ronde 1"
+horizontal_alignment = 1
+vertical_alignment = 1
